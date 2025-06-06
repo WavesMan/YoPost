@@ -90,9 +90,14 @@ YoPost/
   - 用户认证系统
   - API文档生成
 
+## 项目文档
+
+- [开发状态报告](./docs/DEV_STATUS.md) - 详细的项目进度和计划
+- [代码功能文档](./docs/code_function.md) - 核心模块和实现细节
+
 ## 贡献指南
 
-欢迎通过Issues或Pull Requests参与贡献。请先阅读[开发文档](./docs/DEV_STATUS.md)。
+欢迎通过Issues或Pull Requests参与贡献。请先阅读上述文档。
 
 ## 许可证
 
