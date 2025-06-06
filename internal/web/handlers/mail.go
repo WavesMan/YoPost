@@ -54,8 +54,8 @@ func NewMailHandler(mailCore mail.Core) (*MailHandler, error) {
 }
 
 func (h *MailHandler) RegisterRoutes(router *gin.Engine) {
-	// 静态文件路由
-	//router.Static("/static", filepath.Join("internal", "web", "static"))
+	// 静态文件路由已在main.go中注册
+	// 此处不再重复注册以避免冲突
 
 	// 邮件列表路由
 	router.GET("/mail", h.mailListHandler)
