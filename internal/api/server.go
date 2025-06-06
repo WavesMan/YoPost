@@ -1,3 +1,10 @@
+// Server 提供API服务核心功能
+//
+// cfg: 应用配置
+// mailCore: 邮件服务核心组件
+//
+// NewServer 创建并初始化Server实例
+// Start 启动API服务
 package api
 
 import (

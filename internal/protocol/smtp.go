@@ -1,3 +1,11 @@
+// SMTPServer 实现了简单的SMTP协议服务器，用于接收和处理电子邮件
+//
+// 主要功能包括：
+// - 监听指定端口接收SMTP连接
+// - 处理标准SMTP命令（EHLO/HELO、MAIL FROM、RCPT TO、DATA、QUIT等）
+// - 存储接收到的邮件到邮件核心系统
+//
+// 结构体包含配置信息、邮件核心处理模块和当前会话状态
 package protocol
 
 import (

@@ -1,3 +1,12 @@
+// IMAPServer 实现了IMAP协议服务端功能
+//
+// 主要功能:
+// - 监听指定端口接收IMAP客户端连接
+// - 处理基础IMAP命令交互
+// - 支持通过上下文控制服务启停
+//
+// 使用NewIMAPServer创建实例，通过Start方法启动服务
+// 可通过GetListener获取当前监听器实例
 package protocol
 
 import (

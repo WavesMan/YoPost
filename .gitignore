@@ -26,3 +26,4 @@ coverage.out
 configs/auth.yaml
 configs/db.yaml
 configs/server.yaml
+.yop

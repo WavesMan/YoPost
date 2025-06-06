@@ -1,3 +1,5 @@
+// Config 定义了应用程序的配置结构，包含服务器、数据库、认证、SMTP、IMAP和POP3的配置项
+// Load 函数用于加载并返回配置实例，目前尚未实现具体逻辑
 package config
 
 type Config struct {

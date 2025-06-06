@@ -1,3 +1,11 @@
+// Server 是应用程序的主服务器，负责管理HTTP服务器和邮件协议服务器(SMTP/IMAP/POP3)的生命周期。
+// 使用New()创建服务器实例，通过Start()启动所有服务，Shutdown()用于优雅关闭。
+// 内部包含:
+//   - HTTP API服务器
+//   - SMTP服务器
+//   - IMAP服务器
+//   - POP3服务器
+//   - 邮件核心服务
 package app
 
 import (

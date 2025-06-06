@@ -1,3 +1,8 @@
+// TestMailDeliveryFlow 测试邮件投递流程的端到端集成测试
+// 1. 启动PostgreSQL和Mailhog测试容器
+// 2. 加载测试配置并初始化应用
+// 3. 发送测试邮件并验证Mailhog中收到的邮件
+// 该测试验证了从邮件发送到接收的完整流程
 package mailflow_test
 
 import (

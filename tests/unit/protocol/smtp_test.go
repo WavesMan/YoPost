@@ -1,3 +1,9 @@
+// TestSMTPServer 测试SMTP服务器的基本功能，包括：
+// 1. 服务器启动和监听
+// 2. 客户端连接建立
+// 3. 欢迎消息验证
+// 4. EHLO命令处理
+// 测试会创建一个临时SMTP服务器实例，验证其响应是否符合预期
 package protocol_test
 
 import (

@@ -1,3 +1,9 @@
+// TestIMAPServer 测试 IMAP 服务器的基本功能，包括：
+// 1. 服务器启动和监听
+// 2. 客户端连接建立
+// 3. 欢迎消息验证
+// 4. LOGOUT 命令处理
+// 测试使用临时端口并自动清理资源
 package protocol_test
 
 import (

@@ -1,3 +1,11 @@
+// POP3Server 实现了POP3协议服务器
+//
+// 主要功能包括：
+// - 监听指定端口接收客户端连接
+// - 处理基本的POP3命令交互
+// - 提供邮件服务核心接口
+//
+// 使用NewPOP3Server创建实例，通过Start方法启动服务
 package protocol
 
 import (
