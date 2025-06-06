@@ -7,6 +7,7 @@ bin/
 # Dependency directories
 vendor/
 node_modules/
+internal/web.backup/
 
 # IDE specific files
 .idea/

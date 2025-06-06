@@ -13,6 +13,8 @@ import (
 
 	"github.com/YoPost/internal/app"
 	"github.com/YoPost/internal/config"
+	"github.com/YoPost/internal/web/handlers"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -27,6 +29,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create app: %v", err)
 	}
+
+	// 初始化Web服务
+	webRouter := gin.Default()
+	mailHandler, err := handlers.NewMailHandler(application.MailCore())
+	if err != nil {
+		log.Fatalf("Failed to create mail handler: %v", err)
+	}
+	mailHandler.RegisterRoutes(webRouter)
 
 	// 启动服务
 	go func() {

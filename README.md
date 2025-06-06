@@ -33,9 +33,9 @@ YoPost是一个基于Go语言开发的一体化邮件服务器，提供完整的
 - Prometheus监控
 
 ### 前端
-- React/Vue (待选择)
-- TypeScript
-- WebSocket实时通知
+- Go标准库 html/template
+- HTMX (轻量级交互)
+- Alpine.js (客户端状态管理)
 
 ## 项目结构
 
@@ -48,9 +48,10 @@ YoPost/
 │   ├── api/         # REST API
 │   ├── protocol/    # 邮件协议实现
 │   └── webapp/      # 前端集成
-├── web/             # 前端代码
-│   ├── admin/       # 管理界面
-│   └── mail/        # 用户邮箱界面
+├── internal/web/    # Web界面实现
+│   ├── handlers/    # 页面处理器
+│   ├── templates/   # HTML模板
+│   └── static/      # 静态资源(HTMX/Alpine.js)
 ├── tests/           # 测试代码
 └── docs/            # 文档
 ```
@@ -67,8 +68,7 @@ YoPost/
    # 启动后端服务
    go run cmd/server/main.go
 
-   # 启动前端开发服务器 (待实现)
-   cd web && npm run dev
+   # 静态资源已自动服务
    ```
 
 3. 访问管理界面

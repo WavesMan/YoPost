@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/YoPost/internal/config"
 	"github.com/google/uuid"
@@ -26,6 +27,18 @@ type Core interface {
 	ValidateUser(email string) bool
 	GetConfig() *config.Config
 	StoreEmail(from string, to []string, data string) error
+	GetEmails() ([]Email, error)
+	GetEmail(id string) (*Email, error)
+}
+
+type Email struct {
+	ID      string
+	From    string
+	To      []string
+	Subject string
+	Date    string
+	Body    string
+	Read    bool
 }
 
 type coreImpl struct {
@@ -44,6 +57,64 @@ func (c *coreImpl) ValidateUser(email string) bool {
 
 func (c *coreImpl) GetConfig() *config.Config {
 	return c.cfg
+}
+
+func (c *coreImpl) GetEmails() ([]Email, error) {
+	emailDir := filepath.Join(os.TempDir(), "yopost_emails")
+	files, err := os.ReadDir(emailDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read email directory: %w", err)
+	}
+
+	var emails []Email
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".eml" {
+			id := strings.TrimSuffix(file.Name(), ".eml")
+			fileInfo, err := os.Stat(filepath.Join(emailDir, file.Name()))
+			if err != nil {
+				continue
+			}
+			emails = append(emails, Email{
+				ID:   id,
+				From: "",
+				To:   nil,
+				Date: fileInfo.ModTime().Format(time.RFC822),
+			})
+		}
+	}
+	return emails, nil
+}
+
+func (c *coreImpl) GetEmail(id string) (*Email, error) {
+	emailPath := filepath.Join(os.TempDir(), "yopost_emails", id+".eml")
+	content, err := os.ReadFile(emailPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read email file: %w", err)
+	}
+
+	// 简单解析邮件内容
+	parts := strings.SplitN(string(content), "\n\n", 2)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid email format")
+	}
+
+	headers := strings.Split(parts[0], "\n")
+	var from, to string
+	for _, h := range headers {
+		if strings.HasPrefix(h, "From: ") {
+			from = strings.TrimPrefix(h, "From: ")
+		} else if strings.HasPrefix(h, "To: ") {
+			to = strings.TrimPrefix(h, "To: ")
+		}
+	}
+
+	return &Email{
+		ID:   id,
+		From: from,
+		To:   strings.Split(to, ","),
+		Body: parts[1],
+		Read: false,
+	}, nil
 }
 
 func (c *coreImpl) StoreEmail(from string, to []string, data string) error {

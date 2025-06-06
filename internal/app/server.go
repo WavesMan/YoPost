@@ -55,6 +55,11 @@ func New(cfg *config.Config) (*Server, error) {
 	}, nil
 }
 
+// MailCore 返回邮件核心服务实例
+func (s *Server) MailCore() mail.Core {
+	return s.mailCore
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	wg.Add(4)
