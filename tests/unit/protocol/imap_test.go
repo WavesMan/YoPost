@@ -2,6 +2,7 @@ package protocol_test
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -12,6 +13,9 @@ import (
 )
 
 func TestIMAPServer(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// 创建测试配置
 	cfg := &config.Config{
 		IMAP: config.IMAPConfig{
@@ -24,7 +28,7 @@ func TestIMAPServer(t *testing.T) {
 	// 启动测试服务器
 	serverDone := make(chan error)
 	go func() {
-		serverDone <- server.Start()
+		serverDone <- server.Start(ctx)
 	}()
 
 	// 等待服务器就绪

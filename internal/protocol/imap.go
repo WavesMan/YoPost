@@ -31,25 +31,22 @@ func NewIMAPServer(cfg *config.Config, mailCore mail.Core) *IMAPServer {
 	}
 }
 
-func (s *IMAPServer) Start() error {
+func (s *IMAPServer) Start(ctx context.Context) error {
 	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.IMAP.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("IMAP监听失败: %w", err)
 	}
 	s.listener = ln
-	defer ln.Close()
 
 	log.Printf("IMAP服务监听在 :%d\n", s.cfg.IMAP.Port)
-
-	// 使用context控制服务器生命周期
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	go func() {
 		<-ctx.Done()
 		ln.Close()
 	}()
+
+	defer ln.Close()
 
 	for {
 		conn, err := ln.Accept()
