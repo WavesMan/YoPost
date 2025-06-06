@@ -45,7 +45,23 @@ type coreImpl struct {
 	cfg *config.Config
 }
 
+const (
+	dataDir      = "data"
+	emailsSubDir = "emails"
+)
+
+func ensureDataDir() error {
+	path := filepath.Join(dataDir, emailsSubDir)
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return fmt.Errorf("failed to create mail directory: %w", err)
+	}
+	return nil
+}
+
 func NewCore(cfg *config.Config) (Core, error) {
+	if err := ensureDataDir(); err != nil {
+		return nil, err
+	}
 	return &coreImpl{
 		cfg: cfg,
 	}, nil
@@ -60,7 +76,7 @@ func (c *coreImpl) GetConfig() *config.Config {
 }
 
 func (c *coreImpl) GetEmails() ([]Email, error) {
-	emailDir := filepath.Join(os.TempDir(), "yopost_emails")
+	emailDir := filepath.Join(dataDir, emailsSubDir)
 	files, err := os.ReadDir(emailDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read email directory: %w", err)
@@ -86,7 +102,7 @@ func (c *coreImpl) GetEmails() ([]Email, error) {
 }
 
 func (c *coreImpl) GetEmail(id string) (*Email, error) {
-	emailPath := filepath.Join(os.TempDir(), "yopost_emails", id+".eml")
+	emailPath := filepath.Join(dataDir, emailsSubDir, id+".eml")
 	content, err := os.ReadFile(emailPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read email file: %w", err)
@@ -128,9 +144,8 @@ func (c *coreImpl) StoreEmail(from string, to []string, data string) error {
 		return fmt.Errorf("empty email content")
 	}
 
-	// 使用系统临时目录存储邮件
-	tmpDir := os.TempDir()
-	emailDir := filepath.Join(tmpDir, "yopost_emails")
+	// 使用项目data目录存储邮件
+	emailDir := filepath.Join(dataDir, emailsSubDir)
 	emailID := uuid.New().String()
 	filename := filepath.Join(emailDir, emailID+".eml")
 

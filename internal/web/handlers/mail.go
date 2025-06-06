@@ -16,8 +16,16 @@ type MailHandler struct {
 }
 
 func NewMailHandler(mailCore mail.Core) (*MailHandler, error) {
+	// 创建模板并注册函数
+	tmpl := template.New("").Funcs(template.FuncMap{
+		"safeHTML": func(s string) template.HTML {
+			return template.HTML(s)
+		},
+	})
+
 	// 加载模板
-	tmpl, err := template.ParseGlob(filepath.Join("internal", "web", "templates", "*.html"))
+	var err error
+	tmpl, err = tmpl.ParseGlob(filepath.Join("internal", "web", "templates", "**", "*.html"))
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +38,7 @@ func NewMailHandler(mailCore mail.Core) (*MailHandler, error) {
 
 func (h *MailHandler) RegisterRoutes(router *gin.Engine) {
 	// 静态文件路由
-	router.Static("/static", filepath.Join("internal", "web", "static"))
+	//router.Static("/static", filepath.Join("internal", "web", "static"))
 
 	// 邮件列表路由
 	router.GET("/mail", h.mailListHandler)
@@ -54,6 +62,14 @@ func (h *MailHandler) mailListHandler(c *gin.Context) {
 	}
 
 	// 渲染模板
+	// 检查模板是否存在
+	if h.templates.Lookup("base.html") == nil {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "template not found",
+		})
+		return
+	}
+
 	c.HTML(http.StatusOK, "base.html", gin.H{
 		"NavItems": []NavItem{
 			{Name: "Inbox", Icon: "inbox", Count: 5, IsActive: true},
