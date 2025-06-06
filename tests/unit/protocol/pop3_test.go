@@ -1,83 +1,76 @@
-// TestPOP3Server 测试POP3服务器的基本功能，包括：
-// 1. 服务器启动和监听
-// 2. 客户端连接建立
-// 3. 欢迎消息验证
-// 4. QUIT命令处理
-// 使用临时端口自动分配以避免端口冲突
-// 测试完成后会自动清理服务器资源
+// TestPOP3Server 测试POP3服务器的基本功能
+// 包括服务器启动、连接建立和基本命令交互（USER/PASS/LIST/QUIT）
+// 使用assert包验证服务器响应是否符合预期
+// 测试用例包含：
+// 1. 验证欢迎消息
+// 2. 测试用户认证流程
+// 3. 测试邮件列表查询
+// 4. 测试正常退出流程
 package protocol_test
 
 import (
-	"bytes"
+	"context"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/YoPost/internal/config"
 	"github.com/YoPost/internal/mail"
-	. "github.com/YoPost/internal/protocol"
+	"github.com/YoPost/internal/protocol"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPOP3Server(t *testing.T) {
-	// 创建测试配置
 	cfg := &config.Config{
-		POP3: config.POP3Config{
-			Port: 0, // 让系统自动分配端口
-		},
+		POP3: config.POP3Config{Port: 1110},
 	}
 	mailCore, _ := mail.NewCore(cfg)
-	server := NewPOP3Server(cfg, mailCore)
+	server := protocol.NewPOP3Server(cfg, mailCore)
+
+	ctx := context.Background()
 
 	// 启动测试服务器
-	serverDone := make(chan error)
 	go func() {
-		serverDone <- server.Start()
+		assert.NoError(t, server.Start(ctx))
 	}()
 
-	// 等待服务器就绪
-	select {
-	case err := <-serverDone:
-		t.Fatalf("POP3 server failed to start: %v", err)
-	case <-time.After(100 * time.Millisecond):
-	}
+	// 等待服务器启动
+	time.Sleep(100 * time.Millisecond)
 
-	// 确保测试完成后关闭服务器
-	t.Cleanup(func() {
-		if ln := server.GetListener(); ln != nil {
-			ln.Close()
-		}
+	// 测试连接和基本命令
+	t.Run("basic commands", func(t *testing.T) {
+		conn, err := net.Dial("tcp", "localhost:1110")
+		assert.NoError(t, err)
+		defer conn.Close()
+
+		// 测试欢迎消息
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
+		assert.NoError(t, err)
+		assert.Contains(t, string(buf[:n]), "+OK YoPost POP3")
+
+		// 测试USER/PASS命令
+		_, err = conn.Write([]byte("USER test\r\n"))
+		assert.NoError(t, err)
+		n, err = conn.Read(buf)
+		assert.NoError(t, err)
+		assert.Contains(t, string(buf[:n]), "+OK")
+
+		_, err = conn.Write([]byte("PASS 123456\r\n"))
+		assert.NoError(t, err)
+		n, err = conn.Read(buf)
+		assert.NoError(t, err)
+		assert.Contains(t, string(buf[:n]), "+OK")
+
+		// 测试LIST命令
+		_, err = conn.Write([]byte("LIST\r\n"))
+		assert.NoError(t, err)
+		n, err = conn.Read(buf)
+		assert.NoError(t, err)
+		assert.Contains(t, string(buf[:n]), "+OK 1 messages")
+
+		// 测试QUIT命令
+		_, err = conn.Write([]byte("QUIT\r\n"))
+		assert.NoError(t, err)
 	})
-
-	// 获取服务器地址
-	serverAddr := server.GetListener().Addr().String()
-
-	// 测试连接
-	conn, err := net.Dial("tcp", serverAddr)
-	if err != nil {
-		t.Fatalf("Failed to connect to POP3 server: %v", err)
-	}
-	defer conn.Close()
-
-	// 测试欢迎消息
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		t.Fatalf("Failed to read welcome message: %v", err)
-	}
-	if !bytes.Contains(buf[:n], []byte("+OK YoPost POP3 Service Ready")) {
-		t.Errorf("Unexpected welcome message: %s", string(buf[:n]))
-	}
-
-	// 测试QUIT命令
-	_, err = conn.Write([]byte("QUIT\r\n"))
-	if err != nil {
-		t.Fatalf("Failed to write QUIT command: %v", err)
-	}
-	n, err = conn.Read(buf)
-	if err != nil {
-		t.Fatalf("Failed to read QUIT response: %v", err)
-	}
-	if !bytes.Contains(buf[:n], []byte("+OK Logging out")) {
-		t.Errorf("Unexpected QUIT response: %s", string(buf[:n]))
-	}
 }

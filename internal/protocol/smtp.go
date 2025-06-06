@@ -9,6 +9,7 @@
 package protocol
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -76,7 +77,7 @@ func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
 	return nil
 }
 
-func (s *SMTPServer) Start() error {
+func (s *SMTPServer) Start(ctx context.Context) error {
 	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.SMTP.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {

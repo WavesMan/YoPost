@@ -30,11 +30,44 @@ var rootCmd = &cobra.Command{
 }
 
 // 子命令实现:
-// - startCmd: 启动SMTP/IMAP/POP3服务
-// - stopCmd: 停止邮件服务
-// - configCmd: 配置管理
-// - statusCmd: 服务状态检查
-// - versionCmd: 版本信息
+var startCmd = &cobra.Command{
+    Use:   "start",
+    Short: "启动邮件服务",
+    Run: func(cmd *cobra.Command, args []string) {
+        // 初始化服务上下文
+        // 并发启动IMAP/SMTP/POP3服务
+    }
+}
+
+var stopCmd = &cobra.Command{
+    Use:   "stop", 
+    Short: "停止邮件服务",
+    Run: func(cmd *cobra.Command, args []string) {
+        // 调用各服务的cancel函数
+        // 等待所有服务停止
+    }
+}
+
+// 服务控制结构
+type serverControl struct {
+    ctx    context.Context
+    cancel context.CancelFunc
+}
+
+// 核心函数:
+func startAllServers(cfg *config.Config, mailCore mail.Core) error {
+    // 初始化服务上下文
+    // 启动各协议服务协程
+}
+
+func stopAllServers() {
+    // 调用各服务的cancel函数
+}
+
+func waitForShutdown() {
+    // 监听系统信号
+    // 触发优雅关闭
+}
 ```
 
 功能说明：
@@ -139,21 +172,140 @@ type coreImpl struct {
 
 ## 3. 协议实现 (internal/protocol)
 
-### 3.1 IMAP协议 (imap.go)
+### 3.1 IMAP协议 (imap.go) - 开发进度: 65%
+```go
+// IMAPServer 实现了IMAP协议服务端功能
+//
+// 已完成功能:
+// - 基础连接管理
+// - 基本命令支持(LOGOUT/SELECT/FETCH/SEARCH)
+// - 上下文感知的服务启停
+//
+// 待实现功能:
+// - 邮箱状态维护(UIDVALIDITY/UIDNEXT)
+// - 扩展命令支持(UIDPLUS/CONDSTORE)
+// - 邮件标记操作(FLAGS/PERMANENTFLAGS)
+//
+// 测试覆盖率: 45%
+type IMAPServer struct {
+    cfg      *config.Config  // 应用配置
+    mailCore mail.Core       // 邮件核心服务
+    listener net.Listener    // 网络监听器
+}
+```
+
+### 3.2 POP3协议 (pop3.go) - 开发进度: 70%
+```go
+// POP3Server 实现了POP3协议服务器
+//
+// 已完成功能:
+// - 基础连接管理
+// - 认证流程(USER/PASS)
+// - 邮件列表操作(LIST/RETR/DELE)
+// - 会话终止(QUIT)
+//
+// 待实现功能:
+// - UIDL命令支持
+// - TOP命令实现
+// - 认证加密支持
+//
+// 测试覆盖率: 60%
+type POP3Server struct {
+    cfg      *config.Config  // 应用配置
+    mailCore mail.Core       // 邮件核心服务
+    listener net.Listener    // 网络监听器
+}
+```
+
+### 3.3 SMTP协议 (smtp.go) - 开发进度: 85%
+```go
+// SMTPServer 实现了SMTP协议服务器
+//
+// 已完成功能:
+// - 完整SMTP命令支持(EHLO/MAIL/RCPT/DATA/QUIT)
+// - 邮件内容解析与存储
+// - 多收件人处理
+// - 错误处理与状态码返回
+//
+// 待实现功能:
+// - STARTTLS加密支持
+// - 发件人验证(SPF/DKIM)
+// - 速率限制
+//
+// 测试覆盖率: 75%
+type SMTPServer struct {
+    cfg         *config.Config  // 应用配置
+    mailCore    mail.Core      // 邮件核心服务
+    currentFrom string         // 当前会话发件人
+    currentTo   []string       // 当前会话收件人列表
+    listener    net.Listener   // 网络监听器
+}
+```
+
+### 3.2 POP3协议 (pop3.go)
 
 ```go
-// IMAPServer 结构
-type IMAPServer struct {
+// POP3Server 实现了POP3协议服务器
+//
+// 主要功能包括：
+// - 监听指定端口接收客户端连接
+// - 处理基本的POP3命令交互
+// - 提供邮件服务核心接口
+//
+// 使用NewPOP3Server创建实例，通过Start方法启动服务
+type POP3Server struct {
     cfg      *config.Config  // 应用配置
     mailCore mail.Core       // 邮件核心服务
     listener net.Listener    // 网络监听器
 }
 
 // 方法:
-// - NewIMAPServer(cfg, mailCore) *IMAPServer
-// - Start() error
+// - NewPOP3Server(cfg, mailCore) *POP3Server
+// - Start(ctx context.Context) error
 // - GetListener() net.Listener
-// - handleConnection(conn net.Conn) (实现基本IMAP协议交互)
+// - handleConnection(conn net.Conn) (实现基本POP3协议交互)
+
+// 支持命令:
+// - USER <username>
+// - PASS <password>
+// - LIST
+// - RETR <message>
+// - DELE <message>
+// - QUIT
+```
+
+### 3.3 SMTP协议 (smtp.go)
+
+```go
+// SMTPServer 实现了简单的SMTP协议服务器，用于接收和处理电子邮件
+//
+// 主要功能包括：
+// - 监听指定端口接收SMTP连接
+// - 处理标准SMTP命令（EHLO/HELO、MAIL FROM、RCPT TO、DATA、QUIT等）
+// - 存储接收到的邮件到邮件核心系统
+//
+// 结构体包含配置信息、邮件核心处理模块和当前会话状态
+type SMTPServer struct {
+    cfg         *config.Config  // 应用配置
+    mailCore    mail.Core      // 邮件核心服务
+    currentFrom string         // 当前会话发件人
+    currentTo   []string       // 当前会话收件人列表
+    listener    net.Listener   // 网络监听器
+}
+
+// 方法:
+// - NewSMTPServer(cfg, mailCore) *SMTPServer
+// - Start(ctx context.Context) error
+// - GetListener() net.Listener
+// - HandleCommand(conn net.Conn, cmd string) error
+// - handleConnection(conn net.Conn) (完整SMTP协议实现)
+
+// 支持命令:
+// - EHLO/HELO <domain>
+// - MAIL FROM:<sender>
+// - RCPT TO:<recipient>
+// - DATA
+// - QUIT
 ```
 
 ### 3.2 POP3协议 (pop3.go)

@@ -12,15 +12,31 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/YoPost/internal/config"
 	"github.com/YoPost/internal/mail"
 	"github.com/YoPost/internal/protocol"
 	"github.com/spf13/cobra"
+)
+
+// 服务控制结构
+type serverControl struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+// 全局服务控制器
+var (
+	imapServer serverControl
+	smtpServer serverControl
+	pop3Server serverControl
 )
 
 var rootCmd = &cobra.Command{
@@ -43,89 +59,22 @@ var startCmd = &cobra.Command{
 	Short: "启动邮件服务",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("启动邮件服务...")
-		// 启动SMTP服务
-		cfg := &config.Config{
-			SMTP: config.SMTPConfig{
-				Port: 2525,
-			},
-			IMAP: config.IMAPConfig{
-				Port: 143,
-			},
-			POP3: config.POP3Config{
-				Port: 110,
-			},
-		}
 
-		mailCore, err := mail.NewCore(cfg)
-		if err != nil {
-			fmt.Printf("创建邮件核心失败: %v\n", err)
-			os.Exit(1)
-		}
+		cfg := loadConfig()
+		mailCore := initMailCore(cfg)
+		checkPorts(cfg)
 
-		// 检查端口是否可用
-		ports := map[string]int{
-			"SMTP": cfg.SMTP.Port,
-			"IMAP": cfg.IMAP.Port,
-			"POP3": cfg.POP3.Port,
-		}
-		for name, port := range ports {
-			if isPortInUse(port) {
-				fmt.Printf("错误: %s端口%d已被占用\n", name, port)
-				os.Exit(1)
-			}
-		}
+		// 初始化服务上下文
+		imapServer.ctx, imapServer.cancel = context.WithCancel(context.Background())
+		smtpServer.ctx, smtpServer.cancel = context.WithCancel(context.Background())
+		pop3Server.ctx, pop3Server.cancel = context.WithCancel(context.Background())
 
-		// 启动所有邮件服务
-		servers := []struct {
-			name    string
-			startFn func() error
-		}{
-			{
-				name: "SMTP",
-				startFn: func() error {
-					fmt.Printf("启动SMTP服务(端口%d)...\n", cfg.SMTP.Port)
-					return protocol.NewSMTPServer(cfg, mailCore).Start()
-				},
-			},
-			{
-				name: "IMAP",
-				startFn: func() error {
-					fmt.Printf("启动IMAP服务(端口%d)...\n", cfg.IMAP.Port)
-					return protocol.NewIMAPServer(cfg, mailCore).Start()
-				},
-			},
-			{
-				name: "POP3",
-				startFn: func() error {
-					fmt.Printf("启动POP3服务(端口%d)...\n", cfg.POP3.Port)
-					return protocol.NewPOP3Server(cfg, mailCore).Start()
-				},
-			},
-		}
+		// 启动服务
+		go startIMAP(cfg, mailCore)
+		go startSMTP(cfg, mailCore)
+		go startPOP3(cfg, mailCore)
 
-		errCh := make(chan error, len(servers))
-		for _, srv := range servers {
-			go func(s struct {
-				name    string
-				startFn func() error
-			}) {
-				if err := s.startFn(); err != nil {
-					errCh <- fmt.Errorf("%s服务启动失败: %v", s.name, err)
-				}
-			}(srv)
-		}
-
-		// 等待第一个错误或全部成功
-		select {
-		case err := <-errCh:
-			fmt.Println(err)
-			os.Exit(1)
-		default:
-			fmt.Println("所有邮件服务已成功启动")
-		}
-
-		// 阻塞主线程
-		select {}
+		waitForShutdown()
 	},
 }
 
@@ -133,7 +82,17 @@ var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "停止邮件服务",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("邮件服务停止中...")
+		fmt.Println("停止邮件服务...")
+		if imapServer.cancel != nil {
+			imapServer.cancel()
+		}
+		if smtpServer.cancel != nil {
+			smtpServer.cancel()
+		}
+		if pop3Server.cancel != nil {
+			pop3Server.cancel()
+		}
+		fmt.Println("所有服务已停止")
 	},
 }
 
@@ -159,6 +118,78 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("yop v0.1.0")
 	},
+}
+
+func startIMAP(cfg *config.Config, mailCore mail.Core) {
+	fmt.Printf("启动IMAP服务(端口%d)...\n", cfg.IMAP.Port)
+	if err := protocol.NewIMAPServer(cfg, mailCore).Start(imapServer.ctx); err != nil {
+		fmt.Printf("IMAP服务错误: %v\n", err)
+	}
+}
+
+func startSMTP(cfg *config.Config, mailCore mail.Core) {
+	fmt.Printf("启动SMTP服务(端口%d)...\n", cfg.SMTP.Port)
+	if err := protocol.NewSMTPServer(cfg, mailCore).Start(smtpServer.ctx); err != nil {
+		fmt.Printf("SMTP服务错误: %v\n", err)
+	}
+}
+
+func startPOP3(cfg *config.Config, mailCore mail.Core) {
+	fmt.Printf("启动POP3服务(端口%d)...\n", cfg.POP3.Port)
+	if err := protocol.NewPOP3Server(cfg, mailCore).Start(pop3Server.ctx); err != nil {
+		fmt.Printf("POP3服务错误: %v\n", err)
+	}
+}
+
+func loadConfig() *config.Config {
+	return &config.Config{
+		SMTP: config.SMTPConfig{Port: 2525},
+		IMAP: config.IMAPConfig{Port: 143},
+		POP3: config.POP3Config{Port: 110},
+	}
+}
+
+func initMailCore(cfg *config.Config) mail.Core {
+	mailCore, err := mail.NewCore(cfg)
+	if err != nil {
+		fmt.Printf("创建邮件核心失败: %v\n", err)
+		os.Exit(1)
+	}
+	return mailCore
+}
+
+func checkPorts(cfg *config.Config) {
+	ports := map[string]int{
+		"SMTP": cfg.SMTP.Port,
+		"IMAP": cfg.IMAP.Port,
+		"POP3": cfg.POP3.Port,
+	}
+	for name, port := range ports {
+		if isPortInUse(port) {
+			fmt.Printf("错误: %s端口%d已被占用\n", name, port)
+			os.Exit(1)
+		}
+	}
+}
+
+func waitForShutdown() {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
+	fmt.Println("\n收到停止信号，正在关闭服务...")
+	stopAllServers()
+}
+
+func stopAllServers() {
+	if imapServer.cancel != nil {
+		imapServer.cancel()
+	}
+	if smtpServer.cancel != nil {
+		smtpServer.cancel()
+	}
+	if pop3Server.cancel != nil {
+		pop3Server.cancel()
+	}
 }
 
 func isPortInUse(port int) bool {

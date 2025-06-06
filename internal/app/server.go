@@ -55,7 +55,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}, nil
 }
 
-func (s *Server) Start() error {
+func (s *Server) Start(ctx context.Context) error {
 	var wg sync.WaitGroup
 	wg.Add(4)
 
@@ -68,21 +68,21 @@ func (s *Server) Start() error {
 
 	go func() {
 		defer wg.Done()
-		if err := s.smtpServer.Start(); err != nil {
+		if err := s.smtpServer.Start(ctx); err != nil {
 			// 处理错误
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := s.imapServer.Start(); err != nil {
+		if err := s.imapServer.Start(ctx); err != nil {
 			// 处理错误
 		}
 	}()
 
 	go func() {
 		defer wg.Done()
-		if err := s.pop3Server.Start(); err != nil {
+		if err := s.pop3Server.Start(ctx); err != nil {
 			// 处理错误
 		}
 	}()

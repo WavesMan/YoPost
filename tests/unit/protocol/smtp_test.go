@@ -3,11 +3,13 @@
 // 2. 客户端连接建立
 // 3. 欢迎消息验证
 // 4. EHLO命令处理
-// 测试会创建一个临时SMTP服务器实例，验证其响应是否符合预期
+// 使用临时端口(0)进行测试，确保测试隔离性
+// 包含清理逻辑确保测试后资源释放
 package protocol_test
 
 import (
 	"bytes"
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -27,10 +29,12 @@ func TestSMTPServer(t *testing.T) {
 	mailCore, _ := mail.NewCore(cfg)
 	server := NewSMTPServer(cfg, mailCore)
 
+	ctx := context.Background()
+
 	// 启动测试服务器
 	serverDone := make(chan error)
 	go func() {
-		serverDone <- server.Start()
+		serverDone <- server.Start(ctx)
 	}()
 
 	// 等待服务器就绪

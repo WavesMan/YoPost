@@ -9,6 +9,8 @@
 package protocol
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -37,7 +39,7 @@ func NewPOP3Server(cfg *config.Config, mailCore mail.Core) *POP3Server {
 	}
 }
 
-func (s *POP3Server) Start() error {
+func (s *POP3Server) Start(ctx context.Context) error {
 	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.POP3.Port))
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -49,11 +51,19 @@ func (s *POP3Server) Start() error {
 	log.Printf("POP3服务监听在 :%d\n", s.cfg.POP3.Port)
 
 	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return fmt.Errorf("接受POP3连接失败: %w", err)
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			conn, err := ln.Accept()
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return nil
+				}
+				return fmt.Errorf("接受POP3连接失败: %w", err)
+			}
+			go s.handleConnection(conn)
 		}
-		go s.handleConnection(conn)
 	}
 }
 
@@ -81,10 +91,49 @@ func (s *POP3Server) handleConnection(conn net.Conn) {
 			continue
 		}
 
-		// TODO: 实现完整POP3命令处理
-		if strings.EqualFold(cmd, "QUIT") {
+		parts := strings.Fields(cmd)
+		if len(parts) == 0 {
+			continue
+		}
+
+		command := strings.ToUpper(parts[0])
+		args := parts[1:]
+
+		switch command {
+		case "QUIT":
 			conn.Write([]byte("+OK Logging out\r\n"))
 			break
+		case "USER":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR Missing username\r\n"))
+				continue
+			}
+			conn.Write([]byte("+OK User accepted\r\n"))
+		case "PASS":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR Missing password\r\n"))
+				continue
+			}
+			conn.Write([]byte("+OK Logged in\r\n"))
+		case "LIST":
+			conn.Write([]byte("+OK 1 messages (310 octets)\r\n"))
+			conn.Write([]byte("1 310\r\n"))
+			conn.Write([]byte(".\r\n"))
+		case "RETR":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR Missing message number\r\n"))
+				continue
+			}
+			conn.Write([]byte("+OK 310 octets\r\n"))
+			conn.Write([]byte("From: test@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nThis is a test email.\r\n.\r\n"))
+		case "DELE":
+			if len(args) < 1 {
+				conn.Write([]byte("-ERR Missing message number\r\n"))
+				continue
+			}
+			conn.Write([]byte("+OK Message marked for deletion\r\n"))
+		default:
+			conn.Write([]byte("-ERR Unknown command\r\n"))
 		}
 
 		// 重置超时时间

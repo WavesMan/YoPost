@@ -30,7 +30,8 @@ func main() {
 
 	// 启动服务
 	go func() {
-		if err := application.Start(); err != nil {
+		ctx := context.Background()
+		if err := application.Start(ctx); err != nil {
 			log.Fatalf("Failed to start app: %v", err)
 		}
 	}()

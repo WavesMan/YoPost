@@ -48,25 +48,42 @@ func (s *IMAPServer) Start(ctx context.Context) error {
 	}
 	s.listener = ln
 
-	log.Printf("IMAP服务监听在 :%d\n", s.cfg.IMAP.Port)
+	// 更新配置中的实际端口(当使用0时)
+	if s.cfg.IMAP.Port == 0 {
+		s.cfg.IMAP.Port = ln.Addr().(*net.TCPAddr).Port
+	}
+
+	log.Printf("IMAP服务启动成功，监听在 :%d\n", s.cfg.IMAP.Port)
+
+	// 使用通道处理服务器关闭
+	serverClosed := make(chan struct{})
+	defer close(serverClosed)
 
 	go func() {
-		<-ctx.Done()
-		ln.Close()
+		select {
+		case <-ctx.Done():
+			ln.Close()
+		case <-serverClosed:
+			// 正常退出
+		}
 	}()
-
-	defer ln.Close()
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			// 如果是由于关闭导致的错误，不返回错误
 			if errors.Is(err, net.ErrClosed) {
-				return nil
+				return nil // 正常关闭
 			}
 			return fmt.Errorf("接受IMAP连接失败: %w", err)
 		}
-		go s.handleConnection(conn)
+
+		select {
+		case <-ctx.Done():
+			conn.Close()
+			return nil
+		default:
+			go s.handleConnection(conn)
+		}
 	}
 }
 
@@ -94,10 +111,36 @@ func (s *IMAPServer) handleConnection(conn net.Conn) {
 			continue
 		}
 
-		// TODO: 实现完整IMAP命令处理
-		if strings.EqualFold(cmd, "LOGOUT") {
+		parts := strings.Fields(cmd)
+		if len(parts) == 0 {
+			continue
+		}
+
+		command := strings.ToUpper(parts[0])
+		args := parts[1:]
+
+		switch command {
+		case "LOGOUT":
 			conn.Write([]byte("* BYE Logging out\r\n"))
 			break
+		case "SELECT":
+			if len(args) < 1 {
+				conn.Write([]byte("* BAD Missing mailbox name\r\n"))
+				continue
+			}
+			conn.Write([]byte(fmt.Sprintf("* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)\r\n* OK [PERMANENTFLAGS ()] Read-only mailbox\r\n* %d EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY 1] UIDs valid\r\n* OK [UIDNEXT 1] Next UID\r\n* OK [READ-ONLY] Select completed\r\n", len(args))))
+		case "FETCH":
+			if len(args) < 2 {
+				conn.Write([]byte("* BAD Missing FETCH arguments\r\n"))
+				continue
+			}
+			// 简单实现：返回示例邮件内容
+			conn.Write([]byte("* 1 FETCH (FLAGS (\\Seen) RFC822 {310}\r\n"))
+			conn.Write([]byte("From: test@example.com\r\nTo: recipient@example.com\r\nSubject: Test\r\n\r\nThis is a test email.\r\n)\r\n"))
+		case "SEARCH":
+			conn.Write([]byte("* SEARCH 1\r\n"))
+		default:
+			conn.Write([]byte("* BAD Unknown command\r\n"))
 		}
 
 		// 重置超时时间
