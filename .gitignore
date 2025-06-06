@@ -1,0 +1,27 @@
+# Binaries
+bin/
+*.exe
+*.out
+
+# Dependency directories
+vendor/
+node_modules/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+*.env.local
+
+# Log files
+*.log
+
+# Test output
+coverage.out
+configs/auth.yaml
+configs/db.yaml
+configs/server.yaml
