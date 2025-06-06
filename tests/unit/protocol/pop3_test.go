@@ -11,15 +11,15 @@ import (
 	. "github.com/YoPost/internal/protocol"
 )
 
-func TestSMTPServer(t *testing.T) {
+func TestPOP3Server(t *testing.T) {
 	// 创建测试配置
 	cfg := &config.Config{
-		SMTP: config.SMTPConfig{
+		POP3: config.POP3Config{
 			Port: 0, // 让系统自动分配端口
 		},
 	}
 	mailCore, _ := mail.NewCore(cfg)
-	server := NewSMTPServer(cfg, mailCore)
+	server := NewPOP3Server(cfg, mailCore)
 
 	// 启动测试服务器
 	serverDone := make(chan error)
@@ -30,7 +30,7 @@ func TestSMTPServer(t *testing.T) {
 	// 等待服务器就绪
 	select {
 	case err := <-serverDone:
-		t.Fatalf("SMTP server failed to start: %v", err)
+		t.Fatalf("POP3 server failed to start: %v", err)
 	case <-time.After(100 * time.Millisecond):
 	}
 
@@ -47,7 +47,7 @@ func TestSMTPServer(t *testing.T) {
 	// 测试连接
 	conn, err := net.Dial("tcp", serverAddr)
 	if err != nil {
-		t.Fatalf("Failed to connect to SMTP server: %v", err)
+		t.Fatalf("Failed to connect to POP3 server: %v", err)
 	}
 	defer conn.Close()
 
@@ -57,20 +57,20 @@ func TestSMTPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to read welcome message: %v", err)
 	}
-	if !bytes.Contains(buf[:n], []byte("220 YoPost SMTP Service Ready")) {
+	if !bytes.Contains(buf[:n], []byte("+OK YoPost POP3 Service Ready")) {
 		t.Errorf("Unexpected welcome message: %s", string(buf[:n]))
 	}
 
-	// 测试EHLO命令
-	_, err = conn.Write([]byte("EHLO test.example.com\r\n"))
+	// 测试QUIT命令
+	_, err = conn.Write([]byte("QUIT\r\n"))
 	if err != nil {
-		t.Fatalf("Failed to write EHLO command: %v", err)
+		t.Fatalf("Failed to write QUIT command: %v", err)
 	}
 	n, err = conn.Read(buf)
 	if err != nil {
-		t.Fatalf("Failed to read EHLO response: %v", err)
+		t.Fatalf("Failed to read QUIT response: %v", err)
 	}
-	if !bytes.Contains(buf[:n], []byte("250-yop.example.com")) {
-		t.Errorf("Unexpected EHLO response: %s", string(buf[:n]))
+	if !bytes.Contains(buf[:n], []byte("+OK Logging out")) {
+		t.Errorf("Unexpected QUIT response: %s", string(buf[:n]))
 	}
 }

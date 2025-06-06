@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -14,6 +15,11 @@ import (
 type POP3Server struct {
 	cfg      *config.Config
 	mailCore mail.Core
+	listener net.Listener
+}
+
+func (s *POP3Server) GetListener() net.Listener {
+	return s.listener
 }
 
 func NewPOP3Server(cfg *config.Config, mailCore mail.Core) *POP3Server {
@@ -29,9 +35,10 @@ func (s *POP3Server) Start() error {
 	if err != nil {
 		return fmt.Errorf("POP3监听失败: %w", err)
 	}
+	s.listener = ln
 	defer ln.Close()
 
-	fmt.Printf("POP3服务监听在 :%d\n", s.cfg.POP3.Port)
+	log.Printf("POP3服务监听在 :%d\n", s.cfg.POP3.Port)
 
 	for {
 		conn, err := ln.Accept()

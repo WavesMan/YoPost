@@ -1,7 +1,10 @@
 package protocol
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -14,6 +17,11 @@ import (
 type IMAPServer struct {
 	cfg      *config.Config
 	mailCore mail.Core
+	listener net.Listener
+}
+
+func (s *IMAPServer) GetListener() net.Listener {
+	return s.listener
 }
 
 func NewIMAPServer(cfg *config.Config, mailCore mail.Core) *IMAPServer {
@@ -29,13 +37,27 @@ func (s *IMAPServer) Start() error {
 	if err != nil {
 		return fmt.Errorf("IMAP监听失败: %w", err)
 	}
+	s.listener = ln
 	defer ln.Close()
 
-	fmt.Printf("IMAP服务监听在 :%d\n", s.cfg.IMAP.Port)
+	log.Printf("IMAP服务监听在 :%d\n", s.cfg.IMAP.Port)
+
+	// 使用context控制服务器生命周期
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		<-ctx.Done()
+		ln.Close()
+	}()
 
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			// 如果是由于关闭导致的错误，不返回错误
+			if errors.Is(err, net.ErrClosed) {
+				return nil
+			}
 			return fmt.Errorf("接受IMAP连接失败: %w", err)
 		}
 		go s.handleConnection(conn)

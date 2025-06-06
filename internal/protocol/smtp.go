@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"strings"
@@ -15,6 +16,11 @@ type SMTPServer struct {
 	mailCore    mail.Core
 	currentFrom string
 	currentTo   []string
+	listener    net.Listener
+}
+
+func (s *SMTPServer) GetListener() net.Listener {
+	return s.listener
 }
 
 func NewSMTPServer(cfg *config.Config, mailCore mail.Core) *SMTPServer {
@@ -68,9 +74,11 @@ func (s *SMTPServer) Start() error {
 	if err != nil {
 		return fmt.Errorf("监听失败: %w", err)
 	}
+	s.listener = ln
 	defer ln.Close()
 
-	fmt.Printf("SMTP服务监听在 :%d\n", s.cfg.SMTP.Port)
+	// 仅记录到日志，不输出到控制台
+	log.Printf("SMTP服务监听在 :%d\n", s.cfg.SMTP.Port)
 
 	for {
 		conn, err := ln.Accept()
