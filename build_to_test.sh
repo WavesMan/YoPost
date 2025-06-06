@@ -1,5 +1,8 @@
 #/bin/sh
 
+echo 清理构建缓存
+rm -rf $TMPDIR/go-build*
+
 echo build命令 yop + cmd/yomail/main.go
 go build -o yop cmd/yomail/main.go
 

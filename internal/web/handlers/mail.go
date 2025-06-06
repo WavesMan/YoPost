@@ -88,15 +88,46 @@ func (h *MailHandler) mailListHandler(c *gin.Context) {
 		return
 	}
 
-	// 使用ExecuteTemplate而不是HTML方法
-	err = tmpl.ExecuteTemplate(c.Writer, "base.html", gin.H{
+	// 设置Content-Type为text/html
+	c.Header("Content-Type", "text/html; charset=utf-8")
+
+	// 确保数据不为nil
+	data := gin.H{
 		"NavItems": []NavItem{
-			{Name: "Inbox", Icon: "inbox", Count: 5, IsActive: true},
-			{Name: "Sent", Icon: "send", Count: 0},
-			{Name: "Drafts", Icon: "drafts", Count: 2},
+			{
+				Name:     "Inbox",
+				Icon:     "inbox",
+				Count:    5,
+				IsActive: true,
+				HTMXGet:  "/mail?folder=inbox",
+			},
+			{
+				Name:    "Sent",
+				Icon:    "send",
+				Count:   0,
+				HTMXGet: "/mail?folder=sent",
+			},
+			{
+				Name:    "Drafts",
+				Icon:    "drafts",
+				Count:   2,
+				HTMXGet: "/mail?folder=drafts",
+			},
 		},
 		"Emails": emails,
-	})
+	}
+
+	// 添加调试日志
+	log.Printf("准备渲染模板，数据: %+v", data)
+	log.Printf("可用模板: %s", h.templates.DefinedTemplates())
+
+	// 执行模板渲染
+	err = h.templates.ExecuteTemplate(c.Writer, "base.html", data)
+	if err != nil {
+		log.Printf("模板渲染错误: %v", err)
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *MailHandler) mailDetailHandler(c *gin.Context) {
