@@ -7,10 +7,10 @@ import (
 
 type IMAPServer struct {
 	cfg      *config.Config
-	mailCore *mail.Core
+	mailCore mail.Core
 }
 
-func NewIMAPServer(cfg *config.Config, mailCore *mail.Core) *IMAPServer {
+func NewIMAPServer(cfg *config.Config, mailCore mail.Core) *IMAPServer {
 	return &IMAPServer{
 		cfg:      cfg,
 		mailCore: mailCore,

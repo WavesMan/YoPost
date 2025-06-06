@@ -1,4 +1,5 @@
 # Binaries
+files_tree.md
 bin/
 *.exe
 *.out
@@ -25,3 +26,4 @@ coverage.out
 configs/auth.yaml
 configs/db.yaml
 configs/server.yaml
+

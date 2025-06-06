@@ -7,10 +7,10 @@ import (
 
 type Server struct {
 	cfg      *config.Config
-	mailCore *mail.Core
+	mailCore mail.Core
 }
 
-func NewServer(cfg *config.Config, mailCore *mail.Core) (*Server, error) {
+func NewServer(cfg *config.Config, mailCore mail.Core) (*Server, error) {
 	return &Server{
 		cfg:      cfg,
 		mailCore: mailCore,

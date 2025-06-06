@@ -4,6 +4,22 @@ type Config struct {
 	Server ServerConfig
 	DB     DBConfig
 	Auth   AuthConfig
+	SMTP   SMTPConfig
+	IMAP   IMAPConfig
+	POP3   POP3Config
+}
+
+type SMTPConfig struct {
+	Port           int
+	MaxMessageSize string
+}
+
+type IMAPConfig struct {
+	Port int
+}
+
+type POP3Config struct {
+	Port int
 }
 
 type ServerConfig struct {

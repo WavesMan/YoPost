@@ -7,10 +7,10 @@ import (
 
 type POP3Server struct {
 	cfg      *config.Config
-	mailCore *mail.Core
+	mailCore mail.Core
 }
 
-func NewPOP3Server(cfg *config.Config, mailCore *mail.Core) *POP3Server {
+func NewPOP3Server(cfg *config.Config, mailCore mail.Core) *POP3Server {
 	return &POP3Server{
 		cfg:      cfg,
 		mailCore: mailCore,

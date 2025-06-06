@@ -16,7 +16,7 @@ type Server struct {
 	smtpServer *protocol.SMTPServer
 	imapServer *protocol.IMAPServer
 	pop3Server *protocol.POP3Server
-	mailCore   *mail.Core
+	mailCore   mail.Core
 }
 
 func New(cfg *config.Config) (*Server, error) {
