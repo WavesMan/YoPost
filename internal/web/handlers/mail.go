@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
 
@@ -23,12 +25,27 @@ func NewMailHandler(mailCore mail.Core) (*MailHandler, error) {
 		},
 	})
 
-	// 加载模板
+	// 加载基础模板
+	basePath := filepath.Join("internal", "web", "templates", "base.html")
 	var err error
-	tmpl, err = tmpl.ParseGlob(filepath.Join("internal", "web", "templates", "**", "*.html"))
+	tmpl, err = tmpl.ParseFiles(basePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load base template: %w", err)
 	}
+
+	// 加载邮件相关模板
+	mailTemplates, err := filepath.Glob(filepath.Join("internal", "web", "templates", "mail", "*.html"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to find mail templates: %w", err)
+	}
+	if len(mailTemplates) > 0 {
+		tmpl, err = tmpl.ParseFiles(mailTemplates...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load mail templates: %w", err)
+		}
+	}
+
+	log.Printf("Loaded templates: %v", tmpl.DefinedTemplates())
 
 	return &MailHandler{
 		mailCore:  mailCore,
@@ -62,15 +79,17 @@ func (h *MailHandler) mailListHandler(c *gin.Context) {
 	}
 
 	// 渲染模板
-	// 检查模板是否存在
-	if h.templates.Lookup("base.html") == nil {
+	tmpl := h.templates.Lookup("base.html")
+	if tmpl == nil {
+		log.Printf("Available templates: %v", h.templates.DefinedTemplates())
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "template not found",
+			"error": "base.html template not found",
 		})
 		return
 	}
 
-	c.HTML(http.StatusOK, "base.html", gin.H{
+	// 使用ExecuteTemplate而不是HTML方法
+	err = tmpl.ExecuteTemplate(c.Writer, "base.html", gin.H{
 		"NavItems": []NavItem{
 			{Name: "Inbox", Icon: "inbox", Count: 5, IsActive: true},
 			{Name: "Sent", Icon: "send", Count: 0},
