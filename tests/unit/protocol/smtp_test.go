@@ -44,6 +44,10 @@ func (m mockMailCore) GetConfig() *config.Config {
 	return m.cfg
 }
 
+func (m mockMailCore) StoreEmail(from string, to []string, data string) error {
+	return nil
+}
+
 func TestSMTPServer_HandleEHLO(t *testing.T) {
 	mockCore := mockMailCore{cfg: testConfig}
 	srv := protocol.NewSMTPServer(testConfig, mockCore)

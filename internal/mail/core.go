@@ -5,6 +5,7 @@ import "github.com/YoPost/internal/config"
 type Core interface {
 	ValidateUser(email string) bool
 	GetConfig() *config.Config
+	StoreEmail(from string, to []string, data string) error
 }
 
 type coreImpl struct {
@@ -23,4 +24,9 @@ func (c *coreImpl) ValidateUser(email string) bool {
 
 func (c *coreImpl) GetConfig() *config.Config {
 	return c.cfg
+}
+
+func (c *coreImpl) StoreEmail(from string, to []string, data string) error {
+	// TODO: 实现邮件存储逻辑
+	return nil
 }

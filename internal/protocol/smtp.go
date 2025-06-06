@@ -11,8 +11,10 @@ import (
 )
 
 type SMTPServer struct {
-	cfg      *config.Config
-	mailCore mail.Core
+	cfg         *config.Config
+	mailCore    mail.Core
+	currentFrom string
+	currentTo   []string
 }
 
 func NewSMTPServer(cfg *config.Config, mailCore mail.Core) *SMTPServer {
@@ -36,17 +38,20 @@ func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
 		return err
 	case "MAIL":
 		if strings.HasPrefix(cmd, "MAIL FROM:") {
+			s.currentFrom = strings.Trim(strings.TrimPrefix(cmd, "MAIL FROM:"), "<>")
 			_, err := conn.Write([]byte("250 OK\r\n"))
 			return err
 		}
 	case "RCPT":
 		if strings.HasPrefix(cmd, "RCPT TO:") {
+			to := strings.Trim(strings.TrimPrefix(cmd, "RCPT TO:"), "<>")
+			s.currentTo = append(s.currentTo, to)
 			_, err := conn.Write([]byte("250 OK\r\n"))
 			return err
 		}
 	case "DATA":
-		_, err := conn.Write([]byte("354 End data with <CR><LF>.<CR><LF>\r\n"))
-		return err
+		// Handled in handleConnection
+		return nil
 	case "QUIT":
 		_, err := conn.Write([]byte("221 Bye\r\n"))
 		return err
@@ -79,7 +84,17 @@ func (s *SMTPServer) Start() error {
 func (s *SMTPServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	conn.Write([]byte("220 YoPost SMTP Service Ready\r\n"))
+	// Reset state for new connection
+	s.currentFrom = ""
+	s.currentTo = nil
+
+	// Send welcome message
+	if _, err := conn.Write([]byte("220 YoPost SMTP Service Ready\r\n")); err != nil {
+		return
+	}
+
+	inData := false
+	var dataBuffer strings.Builder
 
 	buf := make([]byte, 1024)
 	for {
@@ -87,7 +102,50 @@ func (s *SMTPServer) handleConnection(conn net.Conn) {
 		if err != nil {
 			break
 		}
-		cmd := string(buf[:n])
-		s.HandleCommand(conn, cmd)
+
+		text := string(buf[:n])
+		text = strings.TrimRight(text, "\r\n")
+
+		if inData {
+			if text == "." {
+				// End of DATA
+				inData = false
+				if _, err := conn.Write([]byte("250 OK: Message accepted\r\n")); err != nil {
+					return
+				}
+				if err := s.mailCore.StoreEmail(s.currentFrom, s.currentTo, dataBuffer.String()); err != nil {
+					conn.Write([]byte("451 Requested action aborted: local error in processing\r\n"))
+					return
+				}
+				continue
+			}
+
+			// Remove leading dot if present (RFC 5321 section 4.5.2)
+			if strings.HasPrefix(text, ".") {
+				text = text[1:]
+			}
+			dataBuffer.WriteString(text + "\r\n")
+			continue
+		}
+
+		cmd := strings.TrimSpace(text)
+		if cmd == "" {
+			continue
+		}
+
+		if cmd == "DATA" {
+			if dataBuffer.Len() > 0 {
+				dataBuffer.Reset()
+			}
+			inData = true
+			if _, err := conn.Write([]byte("354 End data with <CR><LF>.<CR><LF>\r\n")); err != nil {
+				return
+			}
+			continue
+		}
+
+		if err := s.HandleCommand(conn, cmd); err != nil {
+			return
+		}
 	}
 }

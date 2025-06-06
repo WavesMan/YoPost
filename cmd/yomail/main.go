@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
+	"time"
 
 	"github.com/YoPost/internal/config"
 	"github.com/YoPost/internal/mail"
@@ -29,11 +31,17 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "启动邮件服务",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("启动SMTP服务...")
-		// TODO: 实现IMAP/POP3服务启动
+		fmt.Println("启动邮件服务...")
+		// 启动SMTP服务
 		cfg := &config.Config{
 			SMTP: config.SMTPConfig{
 				Port: 2525,
+			},
+			IMAP: config.IMAPConfig{
+				Port: 143,
+			},
+			POP3: config.POP3Config{
+				Port: 110,
 			},
 		}
 
@@ -43,12 +51,70 @@ var startCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		server := protocol.NewSMTPServer(cfg, mailCore)
-		if err := server.Start(); err != nil {
-			fmt.Printf("启动失败: %v\n", err)
-			os.Exit(1)
+		// 检查端口是否可用
+		ports := map[string]int{
+			"SMTP": cfg.SMTP.Port,
+			"IMAP": cfg.IMAP.Port,
+			"POP3": cfg.POP3.Port,
 		}
-		fmt.Println("SMTP服务已启动")
+		for name, port := range ports {
+			if isPortInUse(port) {
+				fmt.Printf("错误: %s端口%d已被占用\n", name, port)
+				os.Exit(1)
+			}
+		}
+
+		// 启动所有邮件服务
+		servers := []struct {
+			name    string
+			startFn func() error
+		}{
+			{
+				name: "SMTP",
+				startFn: func() error {
+					fmt.Printf("启动SMTP服务(端口%d)...\n", cfg.SMTP.Port)
+					return protocol.NewSMTPServer(cfg, mailCore).Start()
+				},
+			},
+			{
+				name: "IMAP",
+				startFn: func() error {
+					fmt.Printf("启动IMAP服务(端口%d)...\n", cfg.IMAP.Port)
+					return protocol.NewIMAPServer(cfg, mailCore).Start()
+				},
+			},
+			{
+				name: "POP3",
+				startFn: func() error {
+					fmt.Printf("启动POP3服务(端口%d)...\n", cfg.POP3.Port)
+					return protocol.NewPOP3Server(cfg, mailCore).Start()
+				},
+			},
+		}
+
+		errCh := make(chan error, len(servers))
+		for _, srv := range servers {
+			go func(s struct {
+				name    string
+				startFn func() error
+			}) {
+				if err := s.startFn(); err != nil {
+					errCh <- fmt.Errorf("%s服务启动失败: %v", s.name, err)
+				}
+			}(srv)
+		}
+
+		// 等待第一个错误或全部成功
+		select {
+		case err := <-errCh:
+			fmt.Println(err)
+			os.Exit(1)
+		default:
+			fmt.Println("所有邮件服务已成功启动")
+		}
+
+		// 阻塞主线程
+		select {}
 	},
 }
 
@@ -82,6 +148,16 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("yop v0.1.0")
 	},
+}
+
+func isPortInUse(port int) bool {
+	addr := fmt.Sprintf(":%d", port)
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 func main() {
