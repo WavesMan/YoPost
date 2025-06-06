@@ -117,13 +117,24 @@ type Config struct {
 type Core interface {
     ValidateUser(email string) bool  // 当前简单返回true
     GetConfig() *Config
-    StoreEmail(from string, to []string, content string) error (待实现)
+    StoreEmail(from string, to []string, content string) error
 }
 
 // coreImpl 实现
 type coreImpl struct {
     cfg *Config
 }
+
+// StoreEmail 实现细节：
+// - 输入验证：检查发件人、收件人列表和内容是否为空
+// - 存储路径：使用系统临时目录/yopost_emails/
+// - 文件格式：生成唯一ID作为文件名，保存为.eml格式
+// - 文件内容：包含From/To头和邮件内容
+// - 错误处理：返回具体错误信息包括：
+//   * 输入验证错误
+//   * 目录创建失败
+//   * 文件创建失败
+//   * 内容写入失败
 ```
 
 ## 3. 协议实现 (internal/protocol)
