@@ -12,30 +12,32 @@ YoPost是一个基于Go语言开发的一体化邮件服务器，提供完整的
   - POP3 (开发进度70%)
 - 高性能邮件处理核心
 - RESTful管理API (开发中)
-- 支持Docker容器化部署
+- 支持Docker容器化部署 (开发中)
 
 ### 前端功能
 - 管理员界面：
-  - 用户账号管理
-  - 邮件域配置
-  - 服务器监控
+  - [x] 用户账号管理
+  - [ ] 邮件域配置
+  - [ ] 服务器监控
 - 用户邮箱界面：
-  - 邮件收发
-  - 联系人管理
-  - 邮件搜索
+  - [x] 邮件列表
+  - [x] 邮件查看
+  - [ ] 邮件回复/转发
+  - [ ] 联系人管理
+  - [ ] 邮件搜索
 
 ## 技术栈
+
+### 前端
+- 框架: React 19.1.0 + React Router DOM v7.6.2
+- 构建工具: Vite 6.3.5
+- 样式方案: CSS Modules + Flexbox布局
 
 ### 后端
 - Go 1.21+
 - Cobra CLI框架
 - PostgreSQL/Redis (可选)
 - Prometheus监控
-
-### 前端
-- Go标准库 html/template
-- HTMX (轻量级交互)
-- Alpine.js (客户端状态管理)
 
 ## 项目结构
 
@@ -94,6 +96,7 @@ YoPost/
 
 - [开发状态报告](./docs/DEV_STATUS.md) - 详细的项目进度和计划
 - [代码功能文档](./docs/code_function.md) - 核心模块和实现细节
+- [Wev开发文档](./docs/WEB_DEVELOPMENT.md) - Web界面开发指南
 
 ## 贡献指南
 

@@ -1,13 +1,18 @@
-.PHONY: build run test clean
+PHONY: build run dev
 
-build:
-	go build -o bin/server ./cmd/server
+# 开发模式
+dev:
+	cd internal/web && yarn dev & \
+	DEV_MODE=true go run ./cmd/server
 
+# 构建前端资源
+build-frontend:
+	cd internal/web && yarn build
+
+# 生产构建
+build: build-frontend
+	go build -o app ./cmd/server
+
+# 运行生产构建
 run:
-	go run cmd/server/main.go
-
-test:
-	go test ./...
-
-clean:
-	rm -rf bin/
+	./app

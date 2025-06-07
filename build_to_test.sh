@@ -1,14 +1,17 @@
-#/bin/sh
+#!/bin/bash
 
-echo 清理构建缓存
-rm -rf $TMPDIR/go-build*
+# 清理之前的构建
+rm -f yop
 
-echo build命令 yop + cmd/yomail/main.go
-go build -o yop cmd/yomail/main.go
-
-echo build命令 yop + cmd/server/main.go
+# 构建服务器
+export CGO_ENABLED=0
 go build -o yop cmd/server/main.go
 
-echo 执行运行
-./yop start
-
+# 检查构建结果
+if [ -f "yop" ]; then
+  echo "构建成功"
+  ./yop
+else
+  echo "构建失败"
+  exit 1
+fi

@@ -19,7 +19,10 @@ internal/web.backup/
 .env
 *.env.local
 
-# Log files
+# Vite构建输出
+dist
+build
+.DS_Store
 *.log
 
 # Test output
