@@ -82,6 +82,51 @@ func waitForShutdown() {
 
 ## 2. 内部模块 (internal)
 
+### 2.0 Web界面处理 (web/handlers)
+```go
+// MailHandler 处理邮件相关的Web界面请求
+//
+// 主要功能：
+// - 模板加载与渲染
+// - 邮件列表/详情展示
+// - 邮件回复/转发处理
+// - 静态资源服务
+//
+// 技术实现：
+// - 使用html/template进行服务端渲染
+// - 集成HTMX实现局部更新
+// - Alpine.js处理客户端交互
+
+type MailHandler struct {
+    mailCore  mail.Core       // 邮件核心服务
+    templates *template.Template // 模板集合
+}
+
+// 关键方法:
+// - NewMailHandler() 初始化模板和路由
+// - RegisterRoutes() 注册Web路由
+// - mailListHandler() 邮件列表
+// - mailDetailHandler() 邮件详情
+// - replyHandler() 回复邮件
+// - forwardHandler() 转发邮件
+```
+
+#### 模板系统
+- 基础模板: base.html
+  - 包含全局布局和静态资源
+  - 支持暗黑模式切换
+  - 导航菜单动态生成
+- 邮件模板: mail/*.html
+  - 列表视图(list.html)
+  - 详情视图(detail.html)
+  - 回复/转发表单(reply.html)
+
+#### 静态资源
+- CSS: /static/css/main.css
+- JS: 
+  - /static/htmx.min.js
+  - /static/alpine.js
+
 ### 2.1 API服务 (api/server.go)
 
 ```go

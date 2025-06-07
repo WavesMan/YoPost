@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -44,8 +45,13 @@ func main() {
 	// 加载模板
 	webRouter.LoadHTMLGlob("internal/web/templates/**/*")
 
-	// 设置静态文件路由
-	webRouter.Static("/static", "internal/web/static")
+	// 设置静态文件路由（使用绝对路径）
+	absStaticPath, err := filepath.Abs("internal/web/static")
+	if err != nil {
+		log.Fatalf("Failed to resolve static path: %v", err)
+	}
+	webRouter.Static("/static", absStaticPath)
+	log.Printf("Static files served from: %s", absStaticPath)
 
 	mailHandler, err := handlers.NewMailHandler(application.MailCore())
 	if err != nil {

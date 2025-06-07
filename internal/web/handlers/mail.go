@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"time"
 
 	"github.com/YoPost/internal/mail"
 
@@ -114,7 +115,8 @@ func (h *MailHandler) mailListHandler(c *gin.Context) {
 				HTMXGet: "/mail?folder=drafts",
 			},
 		},
-		"Emails": emails,
+		"Emails":  emails,
+		"Version": time.Now().Unix(), // 添加版本号防止缓存
 	}
 
 	// 添加调试日志
