@@ -9,7 +9,9 @@
 package protocol
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls" // 导入 crypto/tls 包以支持 TLS 配置
 	"fmt"
 	"log"
 	"net"
@@ -20,22 +22,117 @@ import (
 	"github.com/YoPost/internal/mail"
 )
 
+// SMTPConfig 包含SMTP服务器的配置参数
+type SMTPConfig struct {
+	Addr      string
+	Domain    string
+	MaxSize   int64
+	TLSEnable bool
+	CertFile  string
+	KeyFile   string
+	SMTP      struct {
+		Port int
+	}
+}
+
 type SMTPServer struct {
-	cfg         *config.Config
-	mailCore    mail.Core
-	currentFrom string
-	currentTo   []string
-	listener    net.Listener
+	config    *SMTPConfig
+	mailCore  mail.Core
+	tlsConfig *tls.Config
+	conn      net.Conn
+	listener  net.Listener
+	reader    *bufio.Reader
+	writer    *bufio.Writer
+	state     sessionState
+	cfg       *config.Config
+}
+
+// NewTestSMTPServer 创建用于测试的SMTP服务器实例
+func NewTestSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) {
+	return NewSMTPServer(cfg, mailCore)
+}
+
+type sessionState struct {
+	sender     string
+	recipients []string
+	data       string
+}
+
+func (s *sessionState) Reset() {
+	s.sender = ""
+	s.recipients = s.recipients[:0]
+	s.data = ""
 }
 
 func (s *SMTPServer) GetListener() net.Listener {
 	return s.listener
 }
 
-func NewSMTPServer(cfg *config.Config, mailCore mail.Core) *SMTPServer {
-	return &SMTPServer{
-		cfg:      cfg,
-		mailCore: mailCore,
+func NewSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) {
+	server := &SMTPServer{
+		config: &SMTPConfig{
+			Addr:      fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.SMTP.Port),
+			Domain:    cfg.Server.Host,
+			MaxSize:   cfg.SMTP.MaxSize,
+			TLSEnable: cfg.SMTP.TLSEnable,
+			CertFile:  cfg.SMTP.CertFile,
+			KeyFile:   cfg.SMTP.KeyFile,
+		},
+		mailCore:  mailCore,
+		tlsConfig: nil,
+	}
+
+	if cfg.SMTP.TLSEnable {
+		cert, err := tls.LoadX509KeyPair(cfg.SMTP.CertFile, cfg.SMTP.KeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load TLS certificate: %v", err)
+		}
+
+		server.tlsConfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
+		}
+	}
+
+	server.state = sessionState{
+		sender:     "",
+		recipients: make([]string, 0),
+		data:       "",
+	}
+
+	return server, nil
+}
+
+func parsePortFromAddr(addr string) int {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 25 // 默认SMTP端口
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 25
+	}
+	return port
+}
+
+func (s *SMTPServer) Start(ctx context.Context) error {
+	addr := s.config.Addr // 使用 s.config.Addr 替代 cfg.SMTP.Addr
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("监听失败: %w", err)
+	}
+	s.listener = ln
+	defer ln.Close()
+
+	log.Printf("SMTP服务监听在 %s\n", addr)
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("接受连接错误: %v", err)
+			continue
+		}
+		go s.handleClient(conn)
 	}
 }
 
@@ -53,14 +150,14 @@ func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
 		return err
 	case "MAIL":
 		if strings.HasPrefix(cmd, "MAIL FROM:") {
-			s.currentFrom = strings.Trim(strings.TrimPrefix(cmd, "MAIL FROM:"), "<>")
+			s.state.sender = strings.Trim(strings.TrimPrefix(cmd, "MAIL FROM:"), "<>")
 			_, err := conn.Write([]byte("250 OK\r\n"))
 			return err
 		}
 	case "RCPT":
 		if strings.HasPrefix(cmd, "RCPT TO:") {
 			to := strings.Trim(strings.TrimPrefix(cmd, "RCPT TO:"), "<>")
-			s.currentTo = append(s.currentTo, to)
+			s.state.recipients = append(s.state.recipients, to)
 			_, err := conn.Write([]byte("250 OK\r\n"))
 			return err
 		}
@@ -77,33 +174,12 @@ func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
 	return nil
 }
 
-func (s *SMTPServer) Start(ctx context.Context) error {
-	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.SMTP.Port))
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("监听失败: %w", err)
-	}
-	s.listener = ln
-	defer ln.Close()
-
-	// 仅记录到日志，不输出到控制台
-	log.Printf("SMTP服务监听在 :%d\n", s.cfg.SMTP.Port)
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			return fmt.Errorf("接受连接失败: %w", err)
-		}
-		go s.handleConnection(conn)
-	}
-}
-
 func (s *SMTPServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	// Reset state for new connection
-	s.currentFrom = ""
-	s.currentTo = nil
+	s.state.sender = ""
+	s.state.recipients = s.state.recipients[:0]
 
 	// Send welcome message
 	if _, err := conn.Write([]byte("220 YoPost SMTP Service Ready\r\n")); err != nil {
@@ -130,7 +206,7 @@ func (s *SMTPServer) handleConnection(conn net.Conn) {
 				if _, err := conn.Write([]byte("250 OK: Message accepted\r\n")); err != nil {
 					return
 				}
-				if err := s.mailCore.StoreEmail(s.currentFrom, s.currentTo, dataBuffer.String()); err != nil {
+				if err := s.mailCore.StoreEmail(s.state.sender, s.state.recipients, dataBuffer.String()); err != nil {
 					conn.Write([]byte("451 Requested action aborted: local error in processing\r\n"))
 					return
 				}
@@ -164,5 +240,197 @@ func (s *SMTPServer) handleConnection(conn net.Conn) {
 		if err := s.HandleCommand(conn, cmd); err != nil {
 			return
 		}
+	}
+}
+
+// handleClient 处理单个SMTP客户端连接
+func (s *SMTPServer) handleClient(conn net.Conn) {
+	defer conn.Close()
+
+	s.conn = conn
+	s.reader = bufio.NewReader(conn)
+	s.writer = bufio.NewWriter(conn)
+	s.state.Reset()
+
+	cmdHandlers := map[string]func(){
+		"EHLO":     s.handleEHLO,
+		"HELO":     s.handleHELO,
+		"MAIL":     s.handleMAIL,
+		"RCPT":     s.handleRCPT,
+		"DATA":     s.handleDATA,
+		"QUIT":     s.handleQUIT,
+		"STARTTLS": s.handleSTARTTLS,
+	}
+
+	for {
+		cmd, err := s.readCommand()
+		if err != nil {
+			return
+		}
+
+		handler, ok := cmdHandlers[cmd]
+		if !ok {
+			s.sendResponse("500 Unknown command\r\n")
+			continue
+		}
+
+		handler()
+	}
+}
+
+// readCommand 读取客户端发送的命令
+func (s *SMTPServer) readCommand() (string, error) {
+	line, err := s.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(line), nil
+}
+
+// sendResponse 发送响应给客户端
+func (s *SMTPServer) sendResponse(response string) {
+	_, err := s.writer.WriteString(response)
+	if err != nil {
+		return
+	}
+
+	err = s.writer.Flush()
+	if err != nil {
+		return
+	}
+}
+
+// handleEHLO 处理EHLO命令，初始化会话
+func (s *SMTPServer) handleEHLO() {
+	s.sendResponse("250-Hello\r\n")
+	s.sendResponse("250-SIZE 10485760\r\n")
+	if s.config.TLSEnable {
+		s.sendResponse("250-STARTTLS\r\n")
+	}
+	s.sendResponse("250 OK\r\n")
+}
+
+// handleHELO 处理HELO命令，初始化会话
+func (s *SMTPServer) handleHELO() {
+	s.sendResponse("250 Hello\r\n")
+}
+
+// handleMAIL 处理MAIL命令
+func (s *SMTPServer) handleMAIL() {
+	cmd, err := s.readCommand()
+	if err != nil {
+		return
+	}
+
+	if !strings.HasPrefix(cmd, "MAIL FROM:") {
+		s.sendResponse("501 Syntax error in parameters or arguments\r\n")
+		return
+	}
+
+	s.state.sender = strings.Trim(strings.TrimPrefix(cmd, "MAIL FROM:"), "<>")
+	s.sendResponse("250 OK\r\n")
+}
+
+// handleRCPT 处理RCPT命令
+func (s *SMTPServer) handleRCPT() {
+	cmd, err := s.readCommand()
+	if err != nil {
+		return
+	}
+
+	if !strings.HasPrefix(cmd, "RCPT TO:") {
+		s.sendResponse("501 Syntax error in parameters or arguments\r\n")
+		return
+	}
+
+	to := strings.Trim(strings.TrimPrefix(cmd, "RCPT TO:"), "<>")
+	s.state.recipients = append(s.state.recipients, to)
+	s.sendResponse("250 OK\r\n")
+}
+
+// handleDATA 处理DATA命令
+func (s *SMTPServer) handleDATA() {
+	s.sendResponse("354 End data with <CR><LF>.<CR><LF>\r\n")
+
+	var data strings.Builder
+	for {
+		line, err := s.reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+
+		if line == ".\r\n" {
+			break
+		}
+
+		// Remove leading dot if present (RFC 5321 section 4.5.2)
+		if strings.HasPrefix(line, ".") {
+			line = line[1:]
+		}
+
+		data.WriteString(line)
+	}
+
+	s.state.data = data.String()
+	s.sendResponse("250 OK: Message accepted\r\n")
+
+	if err := s.mailCore.StoreEmail(s.state.sender, s.state.recipients, s.state.data); err != nil {
+		s.sendResponse("451 Requested action aborted: local error in processing\r\n")
+		return
+	}
+}
+
+// handleQUIT 处理QUIT命令
+func (s *SMTPServer) handleQUIT() {
+	s.sendResponse("221 Bye\r\n")
+}
+
+// handleSTARTTLS 处理STARTTLS命令，启动TLS加密连接
+func (s *SMTPServer) handleSTARTTLS() {
+	if !s.config.TLSEnable || s.tlsConfig == nil {
+		s.sendResponse("421 TLS not available\r\n")
+		return
+	}
+
+	s.sendResponse("220 Ready to start TLS\r\n")
+	tlsConn := tls.Server(s.conn, s.tlsConfig)
+	defer tlsConn.Close()
+
+	// 重新初始化会话状态
+	s.conn = tlsConn
+	s.reader = bufio.NewReader(tlsConn)
+	s.writer = bufio.NewWriter(tlsConn)
+	s.state.Reset()
+}
+
+// GetState 返回当前会话状态，用于测试
+func (s *SMTPServer) GetState() sessionState {
+	return s.state
+}
+
+// ResetState 重置会话状态，用于测试
+func (s *SMTPServer) ResetState() {
+	s.state.Reset()
+}
+
+func (s *SMTPServer) listenAndServe() error {
+	ln, err := net.Listen("tcp", s.config.Addr)
+	if err != nil {
+		return err
+	}
+	s.listener = ln
+	defer ln.Close()
+
+	log.Printf("SMTP服务监听在 %s\n", s.config.Addr)
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("接受连接错误: %v", err)
+			continue
+		}
+
+		go s.handleClient(conn)
 	}
 }

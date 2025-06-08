@@ -14,6 +14,12 @@ type Config struct {
 type SMTPConfig struct {
 	Port           int
 	MaxMessageSize string
+	Addr           string
+	Domain         string
+	MaxSize        int64
+	TLSEnable      bool
+	CertFile       string
+	KeyFile        string
 }
 
 type IMAPConfig struct {

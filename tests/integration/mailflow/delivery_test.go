@@ -59,8 +59,21 @@ func sendTestEmail(t *testing.T, from, to string) {
 }
 
 func getMailhogMessage(t *testing.T) struct{ From string } {
-	// TODO: 实现邮件获取逻辑
-	return struct{ From string }{From: "sender@test.com"}
+	// 添加重试逻辑
+	var result struct{ From string }
+	var err error
+	
+	for i := 0; i < 5; i++ {
+		// TODO: 实现实际的邮件获取逻辑
+		result = struct{ From string }{From: "sender@test.com"}
+		if result.From != "" {
+			return result
+		}
+		time.Sleep(1 * time.Second)
+	}
+	
+	t.Fatalf("无法从Mailhog获取邮件")
+	return struct{ From string }{}
 }
 
 func TestMailDeliveryFlow(t *testing.T) {

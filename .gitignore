@@ -30,5 +30,6 @@ coverage.out
 configs/auth.yaml
 configs/db.yaml
 configs/server.yaml
-.yop
-cmd/server/web/
+cmd/server/web/assets/
+cmd/server/web/index.html
+cmd/server/web/vite.svg
