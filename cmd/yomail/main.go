@@ -14,9 +14,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"sync"
+
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -49,6 +54,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(versionCmd)
@@ -93,6 +99,63 @@ var stopCmd = &cobra.Command{
 			pop3Server.cancel()
 		}
 		fmt.Println("所有服务已停止")
+	},
+}
+
+var devCmd = &cobra.Command{
+	Use:   "dev",
+	Short: "开发模式",
+	Long: `启动开发环境，同时运行前端和后端服务。
+前端服务会启动 yarn dev，
+后端服务会启动 go run main.go`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// 使用 WaitGroup 等待所有 goroutine 完成
+		var wg sync.WaitGroup
+		wg.Add(2) // 等待前端和后端两个服务
+
+		// 启动前端开发服务器
+		go func() {
+			defer wg.Done()
+
+			webCmd := exec.Command("yarn", "dev")
+			webCmd.Dir = filepath.Join("web")
+			webCmd.Stdout = os.Stdout
+			webCmd.Stderr = os.Stderr
+
+			log.Println("正在启动前端开发服务器...")
+			if err := webCmd.Run(); err != nil {
+				log.Printf("前端开发服务器启动失败: %v\n", err)
+				return
+			}
+		}()
+
+		// 启动后端开发服务器
+		go func() {
+			defer wg.Done()
+
+			goCmd := exec.Command("go", "run", "main.go")
+			goCmd.Dir = filepath.Join("cmd", "server")
+			goCmd.Stdout = os.Stdout
+			goCmd.Stderr = os.Stderr
+
+			log.Println("正在启动后端开发服务器...")
+			if err := goCmd.Run(); err != nil {
+				log.Printf("后端开发服务器启动失败: %v\n", err)
+				return
+			}
+		}()
+
+		// 捕获中断信号
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			log.Println("接收到终止信号，正在关闭服务...")
+			os.Exit(0)
+		}()
+
+		wg.Wait()
+		log.Println("开发服务已全部关闭")
 	},
 }
 

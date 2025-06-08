@@ -50,10 +50,12 @@ YoPost/
 │   ├── api/         # REST API
 │   ├── protocol/    # 邮件协议实现
 │   └── webapp/      # 前端集成
-├── internal/web/    # Web界面实现
-│   ├── handlers/    # 页面处理器
-│   ├── templates/   # HTML模板
-│   └── static/      # 静态资源(HTMX/Alpine.js)
+├── web/
+│   └── src/
+│       ├── components/           // 所有组件
+│       ├── App.jsx/css             // 根组件，整合所有子组件
+│       ├── main.jsx                // 入口点
+│       └── index.css               // 全局样式
 ├── tests/           # 测试代码
 └── docs/            # 文档
 ```

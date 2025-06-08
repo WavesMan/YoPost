@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"html/template"
 	"log"
 	"os"
 	"os/signal"
@@ -14,8 +13,6 @@ import (
 
 	"github.com/YoPost/internal/app"
 	"github.com/YoPost/internal/config"
-	"github.com/YoPost/internal/web"
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -31,33 +28,11 @@ func main() {
 		log.Fatalf("Failed to create app: %v", err)
 	}
 
-	// 初始化Web服务
-	webRouter := gin.Default()
-
-	// 注册自定义模板函数
-	webRouter.SetFuncMap(template.FuncMap{
-		"safeHTML": func(s string) template.HTML {
-			return template.HTML(s)
-		},
-	})
-
-	// 提供前端静态资源
-	web.ServeFrontend(webRouter)
-
 	// 启动邮件协议服务
 	go func() {
 		ctx := context.Background()
 		if err := application.Start(ctx); err != nil {
 			log.Fatalf("Failed to start mail services: %v", err)
-		}
-	}()
-
-	// 启动Web服务
-	go func() {
-		addr := ":3000"
-		log.Printf("Web服务监听在 %s", addr)
-		if err := webRouter.Run(addr); err != nil {
-			log.Fatalf("Failed to start web server: %v", err)
 		}
 	}()
 
