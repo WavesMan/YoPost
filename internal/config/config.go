@@ -51,7 +51,7 @@ type AuthConfig struct {
 func Load() (*Config, error) {
 	// TODO: 实现配置加载逻辑
 	return &Config{
-		Server: ServerConfig{Host: "0.0.0.0", Port: 3000},
+		Server: ServerConfig{Host: "127.0.0.1", Port: 8080},
 		SMTP: SMTPConfig{
 			Port:           25,
 			TLSEnable:      false,

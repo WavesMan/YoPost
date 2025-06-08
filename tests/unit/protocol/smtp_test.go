@@ -74,8 +74,8 @@ func TestSMTPServer(t *testing.T) {
 			Host: "127.0.0.1",
 		},
 		SMTP: config.SMTPConfig{
-			Port:           1025,
-			Addr:           "127.0.0.1:1025",
+			Port:           25,
+			Addr:           "127.0.0.1:25",
 			Domain:         "example.com",
 			MaxSize:        10485760,
 			TLSEnable:      false,
@@ -103,7 +103,7 @@ func TestSMTPServer(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	conn, err := net.Dial("tcp", "127.0.0.1:1025")
+	conn, err := net.Dial("tcp", "127.0.0.1:25")
 	if err != nil {
 		t.Fatalf("连接到SMTP服务器失败: %v", err)
 	}
@@ -204,6 +204,17 @@ func TestSMTPServerPortSelection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("创建SMTP服务器失败: %v", err)
 			}
+
+			// 初始化监听器
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			
+			go func() {
+				if err := server.Start(ctx); err != nil {
+					t.Logf("服务器启动错误: %v", err)
+				}
+			}()
+			time.Sleep(100 * time.Millisecond) // 等待服务器启动
 
 			addr := server.GetListener().Addr().String()
 			port := parsePortFromAddr(addr)
