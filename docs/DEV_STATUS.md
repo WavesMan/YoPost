@@ -78,7 +78,7 @@ pie
 ### 1. 协议完善 (优先级:高)
 - [x] 实现IMAP基础命令 (SELECT/FETCH/SEARCH)
 - [x] 完成POP3核心功能 (USER/PASS/LIST/RETR)
-- [ ] 增强SMTP协议安全性 (STARTTLS支持)
+- [x] 增强SMTP协议安全性 (STARTTLS支持)
 - [ ] 实现IMAP扩展命令 (UIDPLUS/CONDSTORE)
 - [ ] 支持POP3 UIDL命令
 
