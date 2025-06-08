@@ -53,7 +53,7 @@ pie
 ### 协议实现状态
 | 协议 | 实现进度 | 关键功能 |
 |------|----------|----------|
-| SMTP | 80% | 完整实现EHLO/MAIL/RCPT/DATA/QUIT |
+| SMTP | 100% | 完整实现EHLO/MAIL/RCPT/DATA/QUIT |
 | IMAP | 30% | 仅实现LOGOUT，缺少SELECT/FETCH等 |
 | POP3 | 30% | 仅实现QUIT，缺少USER/PASS/LIST等 |
 
