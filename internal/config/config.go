@@ -50,5 +50,16 @@ type AuthConfig struct {
 
 func Load() (*Config, error) {
 	// TODO: 实现配置加载逻辑
-	return &Config{}, nil
+	return &Config{
+		Server: ServerConfig{Host: "0.0.0.0", Port: 3000},
+		SMTP: SMTPConfig{
+			Port:           25,
+			TLSEnable:      false,
+			CertFile:       "cert.pem",
+			KeyFile:        "key.pem",
+			MaxMessageSize: "10MB",
+		},
+		IMAP: IMAPConfig{Port: 143},
+		POP3: POP3Config{Port: 110},
+	}, nil
 }

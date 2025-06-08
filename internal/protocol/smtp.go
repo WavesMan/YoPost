@@ -69,9 +69,14 @@ func (s *SMTPServer) GetListener() net.Listener {
 }
 
 func NewSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) {
+	port := 25 // 默认非加密端口
+	if cfg.SMTP.TLSEnable {
+		port = 465 // 加密模式下使用465端口
+	}
+
 	server := &SMTPServer{
 		config: &SMTPConfig{
-			Addr:      fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.SMTP.Port),
+			Addr:      fmt.Sprintf("%s:%d", cfg.Server.Host, port),
 			Domain:    cfg.Server.Host,
 			MaxSize:   cfg.SMTP.MaxSize,
 			TLSEnable: cfg.SMTP.TLSEnable,

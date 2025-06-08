@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,13 +22,17 @@ type mockMailCore struct {
 	}
 }
 
+func (m *mockMailCore) ValidateUser(email string) bool {
+	return true
+}
+
 func (m *mockMailCore) StoreEmail(from string, recipients []string, data string) error {
 	m.storedEmails = append(m.storedEmails, struct {
 		from       string
 		recipients []string
 		data       string
 	}{
-		from:       from, 
+		from:       from,
 		recipients: recipients,
 		data:       data,
 	})
@@ -41,24 +46,23 @@ func (m *mockMailCore) GetConfig() *config.Config {
 func (m *mockMailCore) GetEmail(id string) (*mail.Email, error) {
 	if len(m.storedEmails) > 0 {
 		return &mail.Email{
-			ID:      id,
-			Content: m.storedEmails[0].data,
-			From:    m.storedEmails[0].from,
-			To:      m.storedEmails[0].recipients,
+			ID:   id,
+			Body: m.storedEmails[0].data,
+			From: m.storedEmails[0].from,
+			To:   m.storedEmails[0].recipients,
 		}, nil
 	}
 	return nil, fmt.Errorf("email not found")
 }
 
-// 添加缺失的GetEmails方法实现
-func (m *mockMailCore) GetEmails() ([]*mail.Email, error) {
-	emails := make([]*mail.Email, len(m.storedEmails))
+func (m *mockMailCore) GetEmails() ([]mail.Email, error) {
+	emails := make([]mail.Email, len(m.storedEmails))
 	for i, stored := range m.storedEmails {
-		emails[i] = &mail.Email{
-			ID:      fmt.Sprintf("email-%d", i),
-			Content: stored.data,
-			From:    stored.from,
-			To:      stored.recipients,
+		emails[i] = mail.Email{
+			ID:   fmt.Sprintf("email-%d", i),
+			Body: stored.data,
+			From: stored.from,
+			To:   stored.recipients,
 		}
 	}
 	return emails, nil
@@ -161,6 +165,52 @@ func TestSMTPServer(t *testing.T) {
 	resp, err = readResponse(conn)
 	if err != nil || resp != "221 Bye\r\n" {
 		t.Errorf("QUIT命令测试失败，期望响应'221 Bye'，实际得到: %q, 错误: %v", resp, err)
+	}
+}
+
+func parsePortFromAddr(addr string) int {
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 25 // 默认SMTP端口
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return 25
+	}
+	return port
+}
+
+func TestSMTPServerPortSelection(t *testing.T) {
+	testCases := []struct {
+		name       string
+		tlsEnabled bool
+		expected   int
+	}{
+		{"NonTLS mode", false, 25},
+		{"TLS mode", true, 465},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.Config{
+				Server: config.ServerConfig{Host: "127.0.0.1"},
+				SMTP: config.SMTPConfig{
+					TLSEnable: tc.tlsEnabled,
+				},
+			}
+
+			mailCore := &mockMailCore{}
+			server, err := protocol.NewSMTPServer(cfg, mailCore)
+			if err != nil {
+				t.Fatalf("创建SMTP服务器失败: %v", err)
+			}
+
+			addr := server.GetListener().Addr().String()
+			port := parsePortFromAddr(addr)
+			if port != tc.expected {
+				t.Errorf("期望端口%d，实际得到%d", tc.expected, port)
+			}
+		})
 	}
 }
 
