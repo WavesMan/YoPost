@@ -31,3 +31,4 @@ configs/auth.yaml
 configs/db.yaml
 configs/server.yaml
 .yop
+cmd/server/web/
