@@ -41,6 +41,12 @@ YoPost是一个基于Go语言开发的一体化邮件服务器，提供完整的
 
 ## 项目结构
 
+- [开发状态报告](./docs/DEV_STATUS.md) - 详细的项目进度和计划
+- [代码功能文档](./docs/code_function.md) - 核心模块和实现细节
+- [Wev开发文档](./docs/WEB_DEVELOPMENT.md) - Web界面开发指南
+- API文档
+  - [SMTP API 文档](./docs/api/SMTP-API.md)
+
 ```
 YoPost/
 ├── cmd/             # 命令行入口

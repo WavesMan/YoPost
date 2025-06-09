@@ -31,8 +31,10 @@ type POP3Config struct {
 }
 
 type ServerConfig struct {
-	Host string
-	Port int
+    Host       string `yaml:"host"`
+    ListenAddr string `yaml:"listen_addr"`  // 确保已有此字段
+    Port       int    `yaml:"port"`
+    Timeout    string `yaml:"timeout"`
 }
 
 type DBConfig struct {
