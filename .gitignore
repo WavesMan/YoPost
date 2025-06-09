@@ -33,3 +33,4 @@ configs/server.yaml
 cmd/server/web/assets/
 cmd/server/web/index.html
 cmd/server/web/vite.svg
+tests/question.md

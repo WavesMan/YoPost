@@ -6,7 +6,7 @@
 // 2. 测试用户认证流程
 // 3. 测试邮件列表查询
 // 4. 测试正常退出流程
-package protocol_test
+package protocol
 
 import (
 	"context"

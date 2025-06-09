@@ -7,6 +7,9 @@ package mailflow_test
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"testing"
 	"time"
 
@@ -15,6 +18,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"net/smtp"
+	"encoding/json"
 )
 
 func startPostgresContainer(ctx context.Context) (testcontainers.Container, error) {
@@ -55,25 +60,61 @@ func loadTestConfig(pg, mailhog testcontainers.Container) *config.Config {
 }
 
 func sendTestEmail(t *testing.T, from, to string) {
-	// TODO: 实现邮件发送逻辑
+    // 实现实际的SMTP邮件发送逻辑
+    client, err := smtp.Dial(fmt.Sprintf("localhost:%d", cfg.SMTP.Port))
+    if err != nil {
+        t.Fatalf("SMTP连接失败: %v", err)
+    }
+    defer client.Close()
+    
+    if err := client.Mail(from); err != nil {
+        t.Fatalf("MAIL FROM命令失败: %v", err)
+    }
+    if err := client.Rcpt(to); err != nil {
+        t.Fatalf("RCPT TO命令失败: %v", err)
+    }
+    
+    wc, err := client.Data()
+    if err != nil {
+        t.Fatalf("DATA命令失败: %v", err)
+    }
+    defer wc.Close()
+    
+    msg := []byte("To: " + to + "\r\nSubject: 测试邮件\r\n\r\n这是集成测试邮件内容")
+    if _, err := wc.Write(msg); err != nil {
+        t.Fatalf("邮件内容写入失败: %v", err)
+    }
 }
 
 func getMailhogMessage(t *testing.T) struct{ From string } {
-	// 添加重试逻辑
-	var result struct{ From string }
-	var err error
-	
-	for i := 0; i < 5; i++ {
-		// TODO: 实现实际的邮件获取逻辑
-		result = struct{ From string }{From: "sender@test.com"}
-		if result.From != "" {
-			return result
-		}
-		time.Sleep(1 * time.Second)
-	}
-	
-	t.Fatalf("无法从Mailhog获取邮件")
-	return struct{ From string }{}
+    // 实现Mailhog API查询逻辑
+    var result struct {
+        Items []struct {
+            From struct {
+                Mailbox string `json:"Mailbox"`
+                Domain  string `json:"Domain"`
+            } `json:"From"`
+        } `json:"items"`
+    }
+    
+    mailhogPort, _ := mailhogContainer.MappedPort(context.Background(), "8025")
+    resp, err := http.Get(fmt.Sprintf("http://localhost:%s/api/v2/messages", mailhogPort.Port()))
+    if err != nil {
+        t.Fatalf("查询Mailhog API失败: %v", err)
+    }
+    defer resp.Body.Close()
+    
+    body, _ := io.ReadAll(resp.Body)
+    if err := json.Unmarshal(body, &result); err != nil {
+        t.Fatalf("解析Mailhog响应失败: %v", err)
+    }
+    
+    if len(result.Items) > 0 {
+        return struct{ From string }{
+            From: result.Items[0].From.Mailbox + "@" + result.Items[0].From.Domain,
+        }
+    }
+    return struct{ From string }{}
 }
 
 func TestMailDeliveryFlow(t *testing.T) {
@@ -93,7 +134,7 @@ func TestMailDeliveryFlow(t *testing.T) {
 	assert.NoError(t, err)
 
 	go func() {
-		assert.NoError(t, app.Start())
+		assert.NoError(t, app.Start(ctx))
 	}()
 	defer app.Shutdown(ctx)
 

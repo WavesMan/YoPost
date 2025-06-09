@@ -8,7 +8,7 @@
 //
 // 3. 验证服务器能正常关闭
 // 测试会检查网络连接、命令响应和服务器关闭行为
-package protocol_test
+package protocol
 
 import (
 	"context"
