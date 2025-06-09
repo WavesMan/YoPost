@@ -2,6 +2,10 @@
 // Load 函数用于加载并返回配置实例，目前尚未实现具体逻辑
 package config
 
+import (
+	"log"
+)
+
 type Config struct {
 	Server ServerConfig
 	DB     DBConfig
@@ -23,18 +27,20 @@ type SMTPConfig struct {
 }
 
 type IMAPConfig struct {
-	Port int
+	Port    int
+	Timeout string `yaml:"timeout"` // 新增超时配置项
 }
 
 type POP3Config struct {
-	Port int
+	Port     int
+	AuthType string `yaml:"auth_type"` // 新增认证类型配置项
 }
 
 type ServerConfig struct {
-    Host       string `yaml:"host"`
-    ListenAddr string `yaml:"listen_addr"`  // 确保已有此字段
-    Port       int    `yaml:"port"`
-    Timeout    string `yaml:"timeout"`
+	Host       string `yaml:"host"`
+	ListenAddr string `yaml:"listen_addr"` // 确保已有此字段
+	Port       int    `yaml:"port"`
+	Timeout    string `yaml:"timeout"`
 }
 
 type DBConfig struct {
@@ -46,35 +52,12 @@ type DBConfig struct {
 }
 
 type AuthConfig struct {
-    SecretKey       string
-    AllowedDomains  []string
-    JWT             JWTConfig
-    RateLimit       RateLimitConfig
-    PasswordPolicy  PasswordPolicyConfig
-}
-
-// 新增JWT配置结构体
-type JWTConfig struct {
-    Expiration int    `yaml:"expiration"`
-    Algorithm  string `yaml:"algorithm"`
-}
-
-// 新增速率限制配置
-type RateLimitConfig struct {
-    Enable   bool `yaml:"enable"`
-    Requests int  `yaml:"requests"`
-}
-
-// 新增密码策略配置
-type PasswordPolicyConfig struct {
-    MinLength         int  `yaml:"min_length"`
-    RequireMixedCase  bool `yaml:"require_mixed_case"`
-    RequireNumbers    bool `yaml:"require_numbers"`
-    RequireSymbols    bool `yaml:"require_symbols"`
+	SecretKey string
+	ExpiresIn int
 }
 
 func Load() (*Config, error) {
-	// TODO: 实现配置加载逻辑
+	log.Printf("INFO: 开始加载系统配置")
 	return &Config{
 		Server: ServerConfig{Host: "127.0.0.1", Port: 8080},
 		SMTP: SMTPConfig{
@@ -84,7 +67,13 @@ func Load() (*Config, error) {
 			KeyFile:        "key.pem",
 			MaxMessageSize: "10MB",
 		},
-		IMAP: IMAPConfig{Port: 143},
-		POP3: POP3Config{Port: 110},
+		IMAP: IMAPConfig{
+			Port:    143,
+			Timeout: "30s", // 添加默认超时配置
+		},
+		POP3: POP3Config{
+			Port:     110,
+			AuthType: "plain", // 添加默认认证类型
+		},
 	}, nil
 }

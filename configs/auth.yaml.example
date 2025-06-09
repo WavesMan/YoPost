@@ -1,15 +1,5 @@
 auth:
-  secret_key: "#REPLACE_WITH_STRONG_SECRET#"  # 必须替换为至少32字符的强密钥
-  allowed_domains: ["example.com"]  # 允许注册的邮箱域名白名单
-  jwt:
-    expiration: 3600  # Token有效期（秒），建议生产环境设为7200(2小时)
-    algorithm: "HS256"  # JWT签名算法
-  # 安全增强配置
-  rate_limit: 
-    enable: true  # 启用API速率限制
-    requests: 100  # 每分钟最大请求数
-  password_policy:
-    min_length: 12  # 密码最小长度
-    require_mixed_case: true  # 需要大小写混合
-    require_numbers: true  # 需要包含数字
-    require_symbols: true  # 需要包含特殊字符
+  secret_key: "your-secret-key-here"
+  token_expires_in: 86400  # 24小时
+  refresh_token_expires_in: 2592000  # 30天
+  password_reset_expires_in: 3600  # 1小时

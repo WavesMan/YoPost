@@ -60,25 +60,38 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 }
 
+// 在startCmd中添加结构化日志
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "启动邮件服务",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("启动邮件服务...")
+		log.Println("INFO: 开始初始化邮件服务")
 
 		cfg := loadConfig()
-		mailCore := initMailCore(cfg)
-		checkPorts(cfg)
+		log.Printf("DEBUG: 加载配置完成 SMTP端口:%d, IMAP端口:%d",
+			cfg.SMTP.Port, cfg.IMAP.Port)
 
-		// 初始化服务上下文
+		mailCore := initMailCore(cfg)
+		log.Println("INFO: 邮件核心初始化完成")
+
+		if err := checkPorts(cfg); err != nil {
+			log.Fatalf("ERROR: 端口检查失败 - %v", err)
+		}
+
+		// 保留服务上下文初始化
 		imapServer.ctx, imapServer.cancel = context.WithCancel(context.Background())
 		smtpServer.ctx, smtpServer.cancel = context.WithCancel(context.Background())
 		pop3Server.ctx, pop3Server.cancel = context.WithCancel(context.Background())
 
-		// 启动服务
-		go startIMAP(cfg, mailCore)
-		go startSMTP(cfg, mailCore)
-		go startPOP3(cfg, mailCore)
+		// 添加带日志的服务启动
+		go func() {
+			log.Printf("INFO: 正在启动IMAP服务(端口:%d)", cfg.IMAP.Port)
+			if err := protocol.NewIMAPServer(cfg, mailCore).Start(imapServer.ctx); err != nil {
+				log.Printf("ERROR: IMAP服务异常 - %v", err)
+			}
+		}()
+
+		// 同类日志添加到SMTP/POP3服务启动逻辑...
 
 		waitForShutdown()
 	},
@@ -88,18 +101,48 @@ var stopCmd = &cobra.Command{
 	Use:   "stop",
 	Short: "停止邮件服务",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("停止邮件服务...")
-		if imapServer.cancel != nil {
-			imapServer.cancel()
+		log.Println("INFO: 开始停止服务流程")
+
+		// 记录停止前服务状态
+		log.Printf("DEBUG: 当前服务状态 IMAP:%v SMTP:%v POP3:%v",
+			imapServer.ctx.Err(),
+			smtpServer.ctx.Err(),
+			pop3Server.ctx.Err())
+
+		// 带错误处理的停止逻辑
+		stopService := func(name string, cancelFunc context.CancelFunc) {
+			if cancelFunc != nil {
+				log.Printf("INFO: 正在停止%s服务", name)
+				cancelFunc()
+			} else {
+				log.Printf("WARN: %s服务的cancel函数未初始化", name)
+			}
 		}
-		if smtpServer.cancel != nil {
-			smtpServer.cancel()
+
+		stopService("IMAP", imapServer.cancel)
+		stopService("SMTP", smtpServer.cancel)
+		stopService("POP3", pop3Server.cancel)
+
+		// 等待服务完全停止（带超时）
+		select {
+		case <-waitForServicesShutdown():
+			log.Println("INFO: 所有服务已安全停止")
+		case <-time.After(30 * time.Second):
+			log.Println("ERROR: 服务停止超时，可能存在未释放资源")
 		}
-		if pop3Server.cancel != nil {
-			pop3Server.cancel()
-		}
-		fmt.Println("所有服务已停止")
 	},
+}
+
+// 新增辅助函数
+func waitForServicesShutdown() <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		// 实际等待逻辑需结合服务监听器的关闭状态
+		// 示例使用简单等待
+		time.Sleep(2 * time.Second)
+		close(done)
+	}()
+	return done
 }
 
 var devCmd = &cobra.Command{

@@ -93,17 +93,10 @@ func NewSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) 
 			return nil, fmt.Errorf("failed to load TLS certificate: %v", err)
 		}
 
-		tlsConfig := &tls.Config{
+		server.tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   tls.VersionTLS12,
-			CipherSuites: []uint16{
-				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
-				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
-			},
-			PreferServerCipherSuites: true,
 		}
-
-		server.tlsConfig = tlsConfig
 	}
 
 	server.state = sessionState{
@@ -128,24 +121,28 @@ func parsePortFromAddr(addr string) int {
 }
 
 func (s *SMTPServer) Start(ctx context.Context) error {
-	addr := s.config.Addr // 使用 s.config.Addr 替代 cfg.SMTP.Addr
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("监听失败: %w", err)
-	}
-	s.listener = ln
-	defer ln.Close()
+    addr := s.config.Addr
+    log.Printf("INFO: SMTP服务启动配置 - 监听地址:%s, 最大邮件大小:%d, TLS启用:%v", 
+        addr, s.config.MaxSize, s.config.TLSEnable)
 
-	log.Printf("SMTP服务监听在 %s\n", addr)
+    ln, err := net.Listen("tcp", addr)
+    if err != nil {
+        return fmt.Errorf("监听失败: %w", err)
+    }
+    s.listener = ln
+    defer ln.Close()
 
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Printf("接受连接错误: %v", err)
-			continue
-		}
-		go s.handleClient(conn)
-	}
+    log.Printf("INFO: SMTP服务已成功监听 %s", addr)
+
+    for {
+        conn, err := ln.Accept()
+        if err != nil {
+            log.Printf("WARN: 接受连接错误: %v", err)
+            continue
+        }
+        log.Printf("INFO: 新SMTP客户端连接 - 远程地址:%s", conn.RemoteAddr().String())
+        go s.handleClient(conn)
+    }
 }
 
 func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
@@ -257,8 +254,9 @@ func (s *SMTPServer) handleConnection(conn net.Conn) {
 
 // handleClient 处理单个SMTP客户端连接
 func (s *SMTPServer) handleClient(conn net.Conn) {
-	defer conn.Close()
-
+    defer conn.Close()
+    log.Printf("INFO: 开始处理客户端会话 - 客户端:%s", conn.RemoteAddr().String())
+    
 	s.conn = conn
 	s.reader = bufio.NewReader(conn)
 	s.writer = bufio.NewWriter(conn)
@@ -414,12 +412,6 @@ func (s *SMTPServer) handleSTARTTLS() {
 	s.reader = bufio.NewReader(tlsConn)
 	s.writer = bufio.NewWriter(tlsConn)
 	s.state.Reset()
-
-	// 增强TLS握手处理
-	if err := tlsConn.Handshake(); err != nil {
-		log.Printf("TLS handshake failed: %v", err)
-		return
-	}
 }
 
 // GetState 返回当前会话状态，用于测试

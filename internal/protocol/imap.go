@@ -42,6 +42,9 @@ func NewIMAPServer(cfg *config.Config, mailCore mail.Core) *IMAPServer {
 
 func (s *IMAPServer) Start(ctx context.Context) error {
 	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.IMAP.Port))
+	log.Printf("INFO: 初始化IMAP服务 - 监听端口:%d, 超时设置:%v", 
+		s.cfg.IMAP.Port, s.cfg.IMAP.Timeout)
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("IMAP监听失败: %w", err)
@@ -54,6 +57,7 @@ func (s *IMAPServer) Start(ctx context.Context) error {
 	}
 
 	log.Printf("IMAP服务启动成功，监听在 :%d\n", s.cfg.IMAP.Port)
+	log.Printf("INFO: IMAP服务已就绪，等待客户端连接")
 
 	// 使用通道处理服务器关闭
 	serverClosed := make(chan struct{})
@@ -89,6 +93,7 @@ func (s *IMAPServer) Start(ctx context.Context) error {
 
 func (s *IMAPServer) handleConnection(conn net.Conn) {
 	defer conn.Close()
+	log.Printf("INFO: 新IMAP客户端连接 - 客户端:%s", conn.RemoteAddr().String())
 
 	// 设置读写超时
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -118,6 +123,8 @@ func (s *IMAPServer) handleConnection(conn net.Conn) {
 
 		command := strings.ToUpper(parts[0])
 		args := parts[1:]
+
+		log.Printf("INFO: 处理IMAP命令 - 命令:%s 参数:%v", command, args)
 
 		switch command {
 		case "LOGOUT":

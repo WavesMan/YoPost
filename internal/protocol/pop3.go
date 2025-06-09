@@ -41,6 +41,9 @@ func NewPOP3Server(cfg *config.Config, mailCore mail.Core) *POP3Server {
 
 func (s *POP3Server) Start(ctx context.Context) error {
 	addr := net.JoinHostPort("", strconv.Itoa(s.cfg.POP3.Port))
+	log.Printf("INFO: 初始化POP3服务 - 监听端口:%d, 认证方式:%s", 
+		s.cfg.POP3.Port, s.cfg.POP3.AuthType)
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("POP3监听失败: %w", err)
@@ -48,7 +51,7 @@ func (s *POP3Server) Start(ctx context.Context) error {
 	s.listener = ln
 	defer ln.Close()
 
-	log.Printf("POP3服务监听在 :%d\n", s.cfg.POP3.Port)
+	log.Printf("INFO: POP3服务已就绪，等待客户端连接")
 
 	for {
 		select {
@@ -69,6 +72,7 @@ func (s *POP3Server) Start(ctx context.Context) error {
 
 func (s *POP3Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
+	log.Printf("INFO: 新POP3客户端连接 - 客户端:%s", conn.RemoteAddr().String())
 
 	// 设置读写超时
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
@@ -98,6 +102,8 @@ func (s *POP3Server) handleConnection(conn net.Conn) {
 
 		command := strings.ToUpper(parts[0])
 		args := parts[1:]
+
+		log.Printf("INFO: 处理POP3命令 - 命令:%s 参数:%v", command, args)
 
 		switch command {
 		case "QUIT":
