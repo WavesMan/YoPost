@@ -62,7 +62,7 @@ func Load() (*Config, error) {
 		Server: ServerConfig{Host: "127.0.0.1", Port: 8080},
 		SMTP: SMTPConfig{
 			Port:           25,
-			TLSEnable:      false,
+			TLSEnable:      true,
 			CertFile:       "cert.pem",
 			KeyFile:        "key.pem",
 			MaxMessageSize: "10MB",

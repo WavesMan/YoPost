@@ -10,19 +10,82 @@ import (
 	"time"
 
 	"github.com/YoPost/internal/config"
+	"github.com/YoPost/internal/mail"
 	"github.com/YoPost/internal/protocol"
 )
 
+type mockMailCore struct {
+	storedEmails []struct {
+		from       string
+		recipients []string
+		data       string
+	}
+}
+
+func (m *mockMailCore) ValidateUser(email string) bool {
+	return true
+}
+
+func (m *mockMailCore) StoreEmail(from string, recipients []string, data string) error {
+	m.storedEmails = append(m.storedEmails, struct {
+		from       string
+		recipients []string
+		data       string
+	}{
+		from:       from,
+		recipients: recipients,
+		data:       data,
+	})
+	return nil
+}
+
+func (m *mockMailCore) GetConfig() *config.Config {
+	return &config.Config{}
+}
+
+func (m *mockMailCore) GetEmail(id string) (*mail.Email, error) {
+	if len(m.storedEmails) > 0 {
+		return &mail.Email{
+			ID:   id,
+			Body: m.storedEmails[0].data,
+			From: m.storedEmails[0].from,
+			To:   m.storedEmails[0].recipients,
+		}, nil
+	}
+	return nil, fmt.Errorf("email not found")
+}
+
+func (m *mockMailCore) GetEmails() ([]mail.Email, error) {
+	emails := make([]mail.Email, len(m.storedEmails))
+	for i, stored := range m.storedEmails {
+		emails[i] = mail.Email{
+			ID:   fmt.Sprintf("email-%d", i),
+			Body: stored.data,
+			From: stored.from,
+			To:   stored.recipients,
+		}
+	}
+	return emails, nil
+}
+
 func TestSMTPServer(t *testing.T) {
-	mailCore := &MockMailCore{}
-	// 使用动态端口配置
 	cfg := &config.Config{
+		Server: config.ServerConfig{
+			Host: "127.0.0.1",
+		},
 		SMTP: config.SMTPConfig{
-			Port:      0, // 使用0让系统自动分配端口
-			MaxSize:   10485760,
-			TLSEnable: false,
+			Port:           25,
+			Addr:           "127.0.0.1:25",
+			Domain:         "example.com",
+			MaxSize:        10485760,
+			TLSEnable:      false,
+			CertFile:       "",
+			KeyFile:        "",
+			MaxMessageSize: "10MB",
 		},
 	}
+
+	mailCore := &mockMailCore{}
 	server, err := protocol.NewSMTPServer(cfg, mailCore)
 	if err != nil {
 		t.Fatalf("创建SMTP服务器失败: %v", err)
@@ -40,8 +103,7 @@ func TestSMTPServer(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	addr := server.GetListener().Addr().String()
-	conn, err := net.Dial("tcp", addr)
+	conn, err := net.Dial("tcp", "127.0.0.1:25")
 	if err != nil {
 		t.Fatalf("连接到SMTP服务器失败: %v", err)
 	}
@@ -59,10 +121,10 @@ func TestSMTPServer(t *testing.T) {
 		t.Errorf("EHLO命令测试失败，期望响应以'250-'开头，实际得到: %q, 错误: %v", resp, err)
 	}
 
-	fmt.Fprintf(conn, "MAIL From:<test@example.com>\r\n")
+	fmt.Fprintf(conn, "MAIL FROM:<test@example.com>\r\n")
 	resp, err = readResponse(conn)
 	if err != nil || resp != "250 OK\r\n" {
-		t.Errorf("MAIL From命令测试失败，期望响应'250 OK'，实际得到: %q, 错误: %v", resp, err)
+		t.Errorf("MAIL FROM命令测试失败，期望响应'250 OK'，实际得到: %q, 错误: %v", resp, err)
 	}
 
 	fmt.Fprintf(conn, "RCPT TO:<recipient@example.com>\r\n")
@@ -71,31 +133,31 @@ func TestSMTPServer(t *testing.T) {
 		t.Errorf("RCPT TO命令测试失败，期望响应'250 OK'，实际得到: %q, 错误: %v", resp, err)
 	}
 
-	fmt.Fprintf(conn, "Data\r\n")
+	fmt.Fprintf(conn, "DATA\r\n")
 	resp, err = readResponse(conn)
-	if err != nil || resp != "354 End Data with <CR><LF>.<CR><LF>\r\n" {
-		t.Errorf("Data命令测试失败，期望响应'354 End Data with <CR><LF>.<CR><LF>'，实际得到: %q, 错误: %v", resp, err)
+	if err != nil || resp != "354 End data with <CR><LF>.<CR><LF>\r\n" {
+		t.Errorf("DATA命令测试失败，期望响应'354 End data with <CR><LF>.<CR><LF>'，实际得到: %q, 错误: %v", resp, err)
 	}
 
-	Data := "Subject: Test\r\n\r\nThis is a test email.\r\n.\r\n"
-	fmt.Fprintf(conn, "%s", Data)
+	data := "Subject: Test\r\n\r\nThis is a test email.\r\n.\r\n"
+	fmt.Fprintf(conn, "%s", data)
 	resp, err = readResponse(conn)
 	if err != nil || resp != "250 OK: Message accepted\r\n" {
-		t.Errorf("Data结束测试失败，期望响应'250 OK: Message accepted'，实际得到: %q, 错误: %v", resp, err)
+		t.Errorf("DATA结束测试失败，期望响应'250 OK: Message accepted'，实际得到: %q, 错误: %v", resp, err)
 	}
 
-	if len(mailCore.StoredEmails) != 1 {
-		t.Errorf("期望存储1封邮件，实际存储了%d封", len(mailCore.StoredEmails))
+	if len(mailCore.storedEmails) != 1 {
+		t.Errorf("期望存储1封邮件，实际存储了%d封", len(mailCore.storedEmails))
 	} else {
-		email := mailCore.StoredEmails[0]
-		if email.From != "test@example.com" {
-			t.Errorf("期望发件人是test@example.com，实际是%s", email.From)
+		email := mailCore.storedEmails[0]
+		if email.from != "test@example.com" {
+			t.Errorf("期望发件人是test@example.com，实际是%s", email.from)
 		}
-		if len(email.Recipients) != 1 || email.Recipients[0] != "recipient@example.com" {
-			t.Errorf("期望收件人是recipient@example.com，实际是%v", email.Recipients)
+		if len(email.recipients) != 1 || email.recipients[0] != "recipient@example.com" {
+			t.Errorf("期望收件人是recipient@example.com，实际是%v", email.recipients)
 		}
-		if !strings.Contains(email.Data, "Subject: Test\r\n\r\nThis is a test email.") {
-			t.Errorf("邮件内容不匹配，实际内容: %s", email.Data)
+		if !strings.Contains(email.data, "Subject: Test\r\n\r\nThis is a test email.") {
+			t.Errorf("邮件内容不匹配，实际内容: %s", email.data)
 		}
 	}
 
@@ -137,7 +199,7 @@ func TestSMTPServerPortSelection(t *testing.T) {
 				},
 			}
 
-			mailCore := &MockMailCore{}
+			mailCore := &mockMailCore{}
 			server, err := protocol.NewSMTPServer(cfg, mailCore)
 			if err != nil {
 				t.Fatalf("创建SMTP服务器失败: %v", err)
@@ -170,7 +232,7 @@ func TestInvalidCommands(t *testing.T) {
 		},
 	}
 
-	mailCore := &MockMailCore{}
+	mailCore := &mockMailCore{}
 	server, err := protocol.NewSMTPServer(cfg, mailCore)
 	if err != nil {
 		t.Fatalf("创建SMTP服务器失败: %v", err)

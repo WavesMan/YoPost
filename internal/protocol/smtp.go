@@ -11,12 +11,13 @@ package protocol
 import (
 	"bufio"
 	"context"
-	"crypto/tls" // 导入 crypto/tls 包以支持 TLS 配置
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/YoPost/internal/config"
 	"github.com/YoPost/internal/mail"
@@ -30,21 +31,26 @@ type SMTPConfig struct {
 	TLSEnable bool
 	CertFile  string
 	KeyFile   string
-	SMTP      struct {
-		Port int
-	}
 }
-
 type SMTPServer struct {
 	config    *SMTPConfig
+	Listener  net.Listener
 	mailCore  mail.Core
 	tlsConfig *tls.Config
 	conn      net.Conn
-	listener  net.Listener
 	reader    *bufio.Reader
 	writer    *bufio.Writer
 	state     sessionState
-	cfg       *config.Config
+	ctx       context.Context
+	cancel    context.CancelFunc
+	wg        sync.WaitGroup
+}
+
+func (s *SMTPServer) Addr() string {
+	if s.Listener != nil {
+		return s.Listener.Addr().String()
+	}
+	return ""
 }
 
 // NewTestSMTPServer 创建用于测试的SMTP服务器实例
@@ -63,86 +69,79 @@ func (s *sessionState) Reset() {
 	s.recipients = s.recipients[:0]
 	s.data = ""
 }
-
-func (s *SMTPServer) GetListener() net.Listener {
-	return s.listener
-}
-
 func NewSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) {
-	port := 25 // 默认非加密端口
-	if cfg.SMTP.TLSEnable {
-		port = 465 // 加密模式下使用465端口
+	port := cfg.SMTP.Port
+	if port == 0 {
+		if cfg.SMTP.TLSEnable {
+			port = 465
+		} else {
+			port = 25
+		}
 	}
-
 	server := &SMTPServer{
 		config: &SMTPConfig{
-			Addr:      fmt.Sprintf("%s:%d", cfg.Server.Host, port),
 			Domain:    cfg.Server.Host,
 			MaxSize:   cfg.SMTP.MaxSize,
 			TLSEnable: cfg.SMTP.TLSEnable,
 			CertFile:  cfg.SMTP.CertFile,
 			KeyFile:   cfg.SMTP.KeyFile,
 		},
-		mailCore:  mailCore,
-		tlsConfig: nil,
+		mailCore: mailCore,
 	}
-
+	// 确保Addr包含端口号
+	server.config.Addr = fmt.Sprintf("%s:%d", cfg.Server.Host, port)
 	if cfg.SMTP.TLSEnable {
 		cert, err := tls.LoadX509KeyPair(cfg.SMTP.CertFile, cfg.SMTP.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load TLS certificate: %v", err)
 		}
-
 		server.tlsConfig = &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   tls.VersionTLS12,
 		}
 	}
-
 	server.state = sessionState{
 		sender:     "",
 		recipients: make([]string, 0),
 		data:       "",
 	}
-
 	return server, nil
 }
-
-func parsePortFromAddr(addr string) int {
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		return 25 // 默认SMTP端口
-	}
-	port, err := strconv.Atoi(portStr)
-	if err != nil {
-		return 25
-	}
-	return port
-}
-
 func (s *SMTPServer) Start(ctx context.Context) error {
-    addr := s.config.Addr
-    log.Printf("INFO: SMTP服务启动配置 - 监听地址:%s, 最大邮件大小:%d, TLS启用:%v", 
-        addr, s.config.MaxSize, s.config.TLSEnable)
+	addr := s.config.Addr
+	log.Printf("INFO: SMTP服务启动配置 - 监听地址:%s, 最大邮件大小:%d, TLS启用:%v",
+		addr, s.config.MaxSize, s.config.TLSEnable)
 
-    ln, err := net.Listen("tcp", addr)
-    if err != nil {
-        return fmt.Errorf("监听失败: %w", err)
-    }
-    s.listener = ln
-    defer ln.Close()
+	// 创建监听器并赋值给Listener字段
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("监听失败: %w", err)
+	}
+	s.Listener = ln
+	s.ctx, s.cancel = context.WithCancel(ctx)
 
-    log.Printf("INFO: SMTP服务已成功监听 %s", addr)
+	log.Printf("INFO: SMTP服务已成功监听 %s", addr)
 
-    for {
-        conn, err := ln.Accept()
-        if err != nil {
-            log.Printf("WARN: 接受连接错误: %v", err)
-            continue
-        }
-        log.Printf("INFO: 新SMTP客户端连接 - 远程地址:%s", conn.RemoteAddr().String())
-        go s.handleClient(conn)
-    }
+	// 添加上下文取消监听
+	go func() {
+		<-s.ctx.Done()
+		if s.Listener != nil {
+			s.Listener.Close()
+		}
+	}()
+
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			if s.ctx.Err() != nil {
+				return nil
+			}
+			log.Printf("WARN: 接受连接错误: %v", err)
+			continue
+		}
+		log.Printf("INFO: 新SMTP客户端连接 - 远程地址:%s", conn.RemoteAddr().String())
+		go s.handleClient(conn)
+	}
 }
 
 func (s *SMTPServer) HandleCommand(conn net.Conn, cmd string) error {
@@ -254,9 +253,14 @@ func (s *SMTPServer) handleConnection(conn net.Conn) {
 
 // handleClient 处理单个SMTP客户端连接
 func (s *SMTPServer) handleClient(conn net.Conn) {
-    defer conn.Close()
-    log.Printf("INFO: 开始处理客户端会话 - 客户端:%s", conn.RemoteAddr().String())
-    
+	defer func() {
+		conn.Close()
+		log.Printf("INFO: 客户端连接已关闭 - 客户端:%s", conn.RemoteAddr().String())
+	}()
+
+	log.Printf("INFO: 开始处理客户端会话 - 客户端:%s", conn.RemoteAddr().String())
+	log.Printf("DEBUG: 连接详情 - 本地地址:%s, 网络类型:%s", conn.LocalAddr().String(), conn.RemoteAddr().Network())
+
 	s.conn = conn
 	s.reader = bufio.NewReader(conn)
 	s.writer = bufio.NewWriter(conn)
@@ -313,6 +317,7 @@ func (s *SMTPServer) sendResponse(response string) {
 
 // handleEHLO 处理EHLO命令，初始化会话
 func (s *SMTPServer) handleEHLO() {
+	log.Printf("INFO: 收到EHLO命令 - 客户端:%s", s.conn.RemoteAddr().String())
 	s.sendResponse("250-Hello\r\n")
 	s.sendResponse("250-SIZE 10485760\r\n")
 	if s.config.TLSEnable {
@@ -330,8 +335,10 @@ func (s *SMTPServer) handleHELO() {
 func (s *SMTPServer) handleMAIL() {
 	cmd, err := s.readCommand()
 	if err != nil {
+		log.Printf("WARN: MAIL命令读取失败 - 客户端:%s, 错误:%v", s.conn.RemoteAddr().String(), err)
 		return
 	}
+	log.Printf("INFO: 收到MAIL FROM命令 - 客户端:%s, 内容:%s", s.conn.RemoteAddr().String(), cmd)
 
 	if !strings.HasPrefix(cmd, "MAIL FROM:") {
 		s.sendResponse("501 Syntax error in parameters or arguments\r\n")
@@ -346,8 +353,10 @@ func (s *SMTPServer) handleMAIL() {
 func (s *SMTPServer) handleRCPT() {
 	cmd, err := s.readCommand()
 	if err != nil {
+		log.Printf("WARN: RCPT命令读取失败 - 客户端:%s, 错误:%v", s.conn.RemoteAddr().String(), err)
 		return
 	}
+	log.Printf("INFO: 收到RCPT TO命令 - 客户端:%s, 内容:%s", s.conn.RemoteAddr().String(), cmd)
 
 	if !strings.HasPrefix(cmd, "RCPT TO:") {
 		s.sendResponse("501 Syntax error in parameters or arguments\r\n")
@@ -393,11 +402,14 @@ func (s *SMTPServer) handleDATA() {
 
 // handleQUIT 处理QUIT命令
 func (s *SMTPServer) handleQUIT() {
+	log.Printf("INFO: 收到QUIT命令 - 客户端:%s", s.conn.RemoteAddr().String())
 	s.sendResponse("221 Bye\r\n")
 }
 
 // handleSTARTTLS 处理STARTTLS命令，启动TLS加密连接
 func (s *SMTPServer) handleSTARTTLS() {
+	log.Printf("DEBUG: 开始处理STARTTLS - 客户端:%s", s.conn.RemoteAddr().String())
+	log.Printf("INFO: 收到STARTTLS请求 - 客户端:%s", s.conn.RemoteAddr().String())
 	if !s.config.TLSEnable || s.tlsConfig == nil {
 		s.sendResponse("421 TLS not available\r\n")
 		return
@@ -405,13 +417,39 @@ func (s *SMTPServer) handleSTARTTLS() {
 
 	s.sendResponse("220 Ready to start TLS\r\n")
 	tlsConn := tls.Server(s.conn, s.tlsConfig)
-	defer tlsConn.Close()
 
-	// 重新初始化会话状态
-	s.conn = tlsConn
-	s.reader = bufio.NewReader(tlsConn)
-	s.writer = bufio.NewWriter(tlsConn)
-	s.state.Reset()
+	// 添加TLS握手超时控制
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- tlsConn.Handshake()
+	}()
+
+	select {
+	case err := <-errChan:
+		if err != nil {
+			log.Printf("ERROR: TLS握手失败: %v", err)
+			tlsConn.Close()
+			return
+		}
+		log.Printf("INFO: TLS握手成功 - 客户端:%s, 协议版本:%x, 加密套件:%s",
+			s.conn.RemoteAddr().String(),
+			tlsConn.ConnectionState().Version,
+			tls.CipherSuiteName(tlsConn.ConnectionState().CipherSuite))
+
+		// 重置会话状态并发送新的欢迎消息
+		s.conn = tlsConn
+		s.reader = bufio.NewReader(tlsConn)
+		s.writer = bufio.NewWriter(tlsConn)
+		s.state.Reset()
+		log.Printf("DEBUG: 准备发送TLS欢迎消息")
+		s.sendResponse("220 YoPost SMTP Service Ready (TLS)\r\n")
+		log.Printf("DEBUG: TLS欢迎消息已发送")
+
+	case <-time.After(5 * time.Second):
+		log.Printf("WARN: TLS握手超时")
+		tlsConn.Close()
+		return
+	}
 }
 
 // GetState 返回当前会话状态，用于测试
@@ -422,25 +460,4 @@ func (s *SMTPServer) GetState() sessionState {
 // ResetState 重置会话状态，用于测试
 func (s *SMTPServer) ResetState() {
 	s.state.Reset()
-}
-
-func (s *SMTPServer) listenAndServe() error {
-	ln, err := net.Listen("tcp", s.config.Addr)
-	if err != nil {
-		return err
-	}
-	s.listener = ln
-	defer ln.Close()
-
-	log.Printf("SMTP服务监听在 %s\n", s.config.Addr)
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			log.Printf("接受连接错误: %v", err)
-			continue
-		}
-
-		go s.handleClient(conn)
-	}
 }
