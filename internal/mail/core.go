@@ -16,8 +16,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
+	"log"
 
 	"github.com/YoPost/internal/config"
 	"github.com/google/uuid"
@@ -68,6 +70,19 @@ func NewCore(cfg *config.Config) (Core, error) {
 }
 
 func (c *coreImpl) ValidateUser(email string) bool {
+	// 添加邮箱格式验证和域名白名单检查
+	if !strings.Contains(email, "@") {
+		return false
+	}
+	if len(c.cfg.Auth.AllowedDomains) > 0 {
+		domain := strings.Split(email, "@")[1]
+		for _, d := range c.cfg.Auth.AllowedDomains {
+			if strings.EqualFold(d, domain) {
+				return true
+			}
+		}
+		return false
+	}
 	return true
 }
 
@@ -134,6 +149,15 @@ func (c *coreImpl) GetEmail(id string) (*Email, error) {
 }
 
 func (c *coreImpl) StoreEmail(from string, to []string, data string) error {
+	// 增强输入验证
+	if !isValidEmail(from) {
+		return fmt.Errorf("invalid from address format")
+	}
+	for _, addr := range to {
+		if !isValidEmail(addr) {
+			return fmt.Errorf("invalid recipient address: %s", addr)
+		}
+	}
 	if from == "" {
 		return fmt.Errorf("empty from address")
 	}
@@ -164,5 +188,13 @@ func (c *coreImpl) StoreEmail(from string, to []string, data string) error {
 		return fmt.Errorf("failed to write email content: %w", err)
 	}
 
+	// 添加审计日志
+	log.Printf("Storing email from:%s to:%v size:%d", from, to, len(data))
+
 	return nil
+}
+
+// 新增邮箱格式验证函数
+func isValidEmail(email string) bool {
+	return regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`).MatchString(email)
 }

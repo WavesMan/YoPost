@@ -93,10 +93,17 @@ func NewSMTPServer(cfg *config.Config, mailCore mail.Core) (*SMTPServer, error) 
 			return nil, fmt.Errorf("failed to load TLS certificate: %v", err)
 		}
 
-		server.tlsConfig = &tls.Config{
+		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{cert},
 			MinVersion:   tls.VersionTLS12,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			},
+			PreferServerCipherSuites: true,
 		}
+
+		server.tlsConfig = tlsConfig
 	}
 
 	server.state = sessionState{
@@ -407,6 +414,12 @@ func (s *SMTPServer) handleSTARTTLS() {
 	s.reader = bufio.NewReader(tlsConn)
 	s.writer = bufio.NewWriter(tlsConn)
 	s.state.Reset()
+
+	// 增强TLS握手处理
+	if err := tlsConn.Handshake(); err != nil {
+		log.Printf("TLS handshake failed: %v", err)
+		return
+	}
 }
 
 // GetState 返回当前会话状态，用于测试

@@ -46,8 +46,31 @@ type DBConfig struct {
 }
 
 type AuthConfig struct {
-	SecretKey string
-	ExpiresIn int
+    SecretKey       string
+    AllowedDomains  []string
+    JWT             JWTConfig
+    RateLimit       RateLimitConfig
+    PasswordPolicy  PasswordPolicyConfig
+}
+
+// 新增JWT配置结构体
+type JWTConfig struct {
+    Expiration int    `yaml:"expiration"`
+    Algorithm  string `yaml:"algorithm"`
+}
+
+// 新增速率限制配置
+type RateLimitConfig struct {
+    Enable   bool `yaml:"enable"`
+    Requests int  `yaml:"requests"`
+}
+
+// 新增密码策略配置
+type PasswordPolicyConfig struct {
+    MinLength         int  `yaml:"min_length"`
+    RequireMixedCase  bool `yaml:"require_mixed_case"`
+    RequireNumbers    bool `yaml:"require_numbers"`
+    RequireSymbols    bool `yaml:"require_symbols"`
 }
 
 func Load() (*Config, error) {
