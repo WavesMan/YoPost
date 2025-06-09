@@ -192,10 +192,20 @@ func startIMAP(cfg *config.Config, mailCore mail.Core) {
 
 func startSMTP(cfg *config.Config, mailCore mail.Core) {
 	fmt.Printf("启动SMTP服务(端口%d)...\n", cfg.SMTP.Port)
-	if err := protocol.NewSMTPServer(cfg, mailCore).Start(smtpServer.ctx); err != nil {
-		fmt.Printf("SMTP服务错误: %v\n", err)
+	_server, err := protocol.NewSMTPServer(cfg, mailCore)
+	if err != nil {
+		fmt.Printf("创建SMTP服务失败： %v\n", err)
+		return
+	}
+	if err := _server.Start(smtpServer.ctx); err != nil {
+		fmt.Printf("SMPTP服务错误： %v\n", err)
 	}
 }
+
+// 	if err := protocol.NewSMTPServer(cfg, mailCore).Start(smtpServer.ctx); err != nil {
+// 		fmt.Printf("SMTP服务错误: %v\n", err)
+// 	}
+// }
 
 func startPOP3(cfg *config.Config, mailCore mail.Core) {
 	fmt.Printf("启动POP3服务(端口%d)...\n", cfg.POP3.Port)

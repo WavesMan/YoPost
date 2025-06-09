@@ -41,7 +41,10 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	// 初始化协议服务器
-	smtpServer := protocol.NewSMTPServer(cfg, mailCore)
+	smtpServer, err := protocol.NewSMTPServer(cfg, mailCore)
+	if err != nil {
+		return nil, err
+	}
 	imapServer := protocol.NewIMAPServer(cfg, mailCore)
 	pop3Server := protocol.NewPOP3Server(cfg, mailCore)
 
