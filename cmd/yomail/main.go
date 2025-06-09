@@ -74,9 +74,14 @@ var startCmd = &cobra.Command{
 		mailCore := initMailCore(cfg)
 		log.Println("INFO: 邮件核心初始化完成")
 
-		if err := checkPorts(cfg); err != nil {
-			log.Fatalf("ERROR: 端口检查失败 - %v", err)
-		}
+		// if err := checkPorts(cfg); err != nil {
+		// 	log.Fatalf("ERROR: 端口检查失败 - %v", err)
+		// }
+
+		// 运行被定义的func函数 startIMAP startSMTP startPOP3
+		go startIMAP(cfg, mailCore)
+		go startSMTP(cfg, mailCore)
+		go startPOP3(cfg, mailCore)
 
 		// 保留服务上下文初始化
 		imapServer.ctx, imapServer.cancel = context.WithCancel(context.Background())
@@ -84,12 +89,12 @@ var startCmd = &cobra.Command{
 		pop3Server.ctx, pop3Server.cancel = context.WithCancel(context.Background())
 
 		// 添加带日志的服务启动
-		go func() {
-			log.Printf("INFO: 正在启动IMAP服务(端口:%d)", cfg.IMAP.Port)
-			if err := protocol.NewIMAPServer(cfg, mailCore).Start(imapServer.ctx); err != nil {
-				log.Printf("ERROR: IMAP服务异常 - %v", err)
-			}
-		}()
+		// go func() {
+		// 	log.Printf("INFO: 正在启动IMAP服务(端口:%d)", cfg.IMAP.Port)
+		// 	if err := protocol.NewIMAPServer(cfg, mailCore).Start(imapServer.ctx); err != nil {
+		// 		log.Printf("ERROR: IMAP服务异常 - %v", err)
+		// 	}
+		// }()
 
 		// 同类日志添加到SMTP/POP3服务启动逻辑...
 
