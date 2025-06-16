@@ -1,5 +1,0 @@
-auth:
-  secret_key: "your-secret-key-here"
-  token_expires_in: 86400  # 24小时
-  refresh_token_expires_in: 2592000  # 30天
-  password_reset_expires_in: 3600  # 1小时

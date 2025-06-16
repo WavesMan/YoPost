@@ -1,0 +1,11 @@
+userinfo:
+  - username: "testuser"
+    password: "testpassword"
+    email: "testuser@yopost.com"
+
+email:
+  test_subject: "YoPost Test Email"
+  test_body: |
+    This is a test email sent from YoPost service.
+    If you received this email, it means the SMTP service is working properly.
+    Please do not reply to this automated message.

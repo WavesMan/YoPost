@@ -1,0 +1,5 @@
+mailserver:
+  host: "0.0.0.0"
+  smtp:
+    notls_port: 25
+    tls_port: 465

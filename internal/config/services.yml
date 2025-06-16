@@ -1,0 +1,4 @@
+# TLS-Status
+tls:
+  enabled: false
+  servers: {}  # 格式: "host:port": status
