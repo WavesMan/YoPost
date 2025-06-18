@@ -29,7 +29,9 @@ func NewMongoDBClient(config MongoDBConfig) (*MongoDBClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	uri := fmt.Sprintf("mongodb://%s:%s@%s:%d", config.User, config.Password, config.Host, config.Port)
+	// 修改连接字符串，添加数据库名称和认证数据库，并强制使用 SCRAM-SHA-256
+	uri := fmt.Sprintf("mongodb://%s:%s@%s:%d/%s?authSource=%s&authMechanism=SCRAM-SHA-256",
+		config.User, config.Password, config.Host, config.Port, config.Database, config.Database)
 	clientOptions := options.Client().ApplyURI(uri)
 
 	client, err := mongo.Connect(ctx, clientOptions)
@@ -62,20 +64,33 @@ func NewMongoDBClient(config MongoDBConfig) (*MongoDBClient, error) {
 
 func (c *MongoDBClient) initCollections() error {
 	log.Println("[DEBUG] Initializing MongoDB collections")
-	
-	// 创建邮件集合
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	collections, err := c.db.ListCollectionNames(ctx, nil)
+	// 先检查数据库是否存在
+	dbNames, err := c.client.ListDatabaseNames(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to list collections: %v", err)
+		return fmt.Errorf("failed to list databases: %v", err)
 	}
 
-	// 检查邮件集合是否存在
-	if !contains(collections, "emails") {
-		log.Println("[INFO] Creating emails collection")
-		if err := c.db.CreateCollection(ctx, "emails"); err != nil {
+	if !contains(dbNames, c.db.Name()) {
+		// 创建数据库
+		log.Printf("[INFO] Creating database '%s'", c.db.Name())
+		if err := c.db.CreateCollection(ctx, "__temp__"); err != nil {
+			return fmt.Errorf("failed to create database: %v", err)
+		}
+		if err := c.db.Collection("__temp__").Drop(ctx); err != nil {
+			return fmt.Errorf("failed to clean up temp collection: %v", err)
+		}
+	}
+
+	// 创建邮件集合
+	log.Println("[INFO] Creating emails collection if not exists")
+	if err := c.db.CreateCollection(ctx, "emails"); err != nil {
+		if cmdErr, ok := err.(mongo.CommandError); ok && cmdErr.Name == "NamespaceExists" {
+			log.Println("[INFO] emails collection already exists")
+		} else {
 			return fmt.Errorf("failed to create emails collection: %v", err)
 		}
 	}

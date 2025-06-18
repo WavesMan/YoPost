@@ -10,24 +10,27 @@ import (
 	"YoPost/internal/db/mysql"
 )
 
-func main() {
-	// Initialize database
-	dbConfig := db.DBConfig{
+var (
+	dbConfig = db.DBConfig{
 		MySQL: mysql.MySQLConfig{
-			Host:     "localhost",
+			Host:     "127.0.0.1",
 			Port:     3306,
-			User:     "root",
-			Password: "password",
+			User:     "yopost",
+			Password: "123456",
 			Database: "yopost",
 		},
 		MongoDB: mongodb.MongoDBConfig{
-			Host:     "localhost",
+			Host:     "127.0.0.1",
 			Port:     27017,
-			User:     "admin",
-			Password: "password",
+			User:     "yopost",
+			Password: "123456",
 			Database: "yopost",
 		},
 	}
+)
+
+func main() {
+	// Initialize database
 	db.InitDB(dbConfig)
 
 	// Initialize API routes
