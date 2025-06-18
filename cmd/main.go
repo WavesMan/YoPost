@@ -2,17 +2,41 @@ package main
 
 import (
 	"log"
+	"net/http"
 
-	"YoPost/internal/service"
+	"YoPost/internal/api/smtp"
+	"YoPost/internal/db"
+	"YoPost/internal/db/mongodb"
+	"YoPost/internal/db/mysql"
 )
 
 func main() {
-	to := "test@example.com"
-	subject := "Test Subject"
-	body := "Test Body"
-
-	if err := service.SendTestEmail(to, subject, body); err != nil {
-		log.Fatalf("Failed to send email: %v", err)
+	// Initialize database
+	dbConfig := db.DBConfig{
+		MySQL: mysql.MySQLConfig{
+			Host:     "localhost",
+			Port:     3306,
+			User:     "root",
+			Password: "password",
+			Database: "yopost",
+		},
+		MongoDB: mongodb.MongoDBConfig{
+			Host:     "localhost",
+			Port:     27017,
+			User:     "admin",
+			Password: "password",
+			Database: "yopost",
+		},
 	}
-	log.Println("Email sent successfully")
+	db.InitDB(dbConfig)
+
+	// Initialize API routes
+	http.HandleFunc("/api/smtp/send", smtp.SendEmailHandler)
+	http.HandleFunc("/api/smtp/config", smtp.GetConfigHandler)
+
+	// Start API server
+	log.Println("Starting API server on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }
